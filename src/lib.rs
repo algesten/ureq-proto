@@ -8,6 +8,8 @@
 #![warn(clippy::all)]
 #![allow(clippy::uninlined_format_args)]
 #![deny(missing_docs)]
+// I don't think elided lifetimes help in understanding the code.
+#![allow(clippy::needless_lifetimes)]
 
 #[macro_use]
 extern crate log;
