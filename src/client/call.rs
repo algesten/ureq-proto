@@ -847,7 +847,8 @@ mod test {
 
         assert_eq!(
             s,
-            "POST /page HTTP/1.1\r\nhost: f.test\r\ntransfer-encoding: chunked\r\n\r\n5\r\nhallo\r\n0\r\n\r\n"
+            "POST /page HTTP/1.1\r\nhost: f.test\r\ntransfer-encoding: chunked\
+                \r\n\r\n5\r\nhallo\r\n0\r\n\r\n"
         );
     }
 
@@ -884,7 +885,8 @@ mod test {
 
         assert_eq!(
             s,
-            "POST /page HTTP/1.1\r\nhost: f.test\r\ntransfer-encoding: chunked\r\n\r\n5\r\nhallo\r\n0\r\n\r\n"
+            "POST /page HTTP/1.1\r\nhost: f.test\r\ntransfer-encoding: chunked\
+                \r\n\r\n5\r\nhallo\r\n0\r\n\r\n"
         );
     }
 
@@ -958,7 +960,11 @@ mod test {
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
-        assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic bWFydGluOnNlY3JldA==\r\n\r\n");
+        assert_eq!(
+            s,
+            "GET /page HTTP/1.1\r\nhost: f.test\r\n\
+                authorization: Basic bWFydGluOnNlY3JldA==\r\n\r\n"
+        );
     }
 
     #[test]
@@ -973,7 +979,8 @@ mod test {
 
         assert_eq!(
             s,
-            "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic bWFydGluOg==\r\n\r\n"
+            "GET /page HTTP/1.1\r\nhost: f.test\r\n\
+                authorization: Basic bWFydGluOg==\r\n\r\n"
         );
     }
 
@@ -989,7 +996,8 @@ mod test {
 
         assert_eq!(
             s,
-            "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic OnNlY3JldA==\r\n\r\n"
+            "GET /page HTTP/1.1\r\nhost: f.test\r\n\
+                authorization: Basic OnNlY3JldA==\r\n\r\n"
         );
     }
 }
