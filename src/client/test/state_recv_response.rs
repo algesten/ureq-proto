@@ -1,4 +1,4 @@
-use http::{StatusCode, Version};
+use http::{header, StatusCode, Version};
 
 use crate::client::test::scenario::Scenario;
 use crate::ext::HeaderIterExt;
@@ -37,8 +37,14 @@ fn receive_complete_response() {
 
     assert_eq!(response.version(), Version::HTTP_11);
     assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.headers().get("content-length").unwrap(), "123");
-    assert!(response.headers().iter().has("content-type", "text/plain"));
+    assert_eq!(
+        response.headers().get(header::CONTENT_LENGTH).unwrap(),
+        "123"
+    );
+    assert!(response
+        .headers()
+        .iter()
+        .has(header::CONTENT_TYPE, "text/plain"));
 
     assert!(flow.can_proceed());
 }

@@ -3,6 +3,7 @@
 use std::fmt;
 use std::marker::PhantomData;
 
+use http::header;
 use http::uri::Scheme;
 use http::{
     HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Uri, Version,
@@ -156,7 +157,7 @@ impl<B> Flow<B, Prepare> {
             close_reason.push(CloseReason::Http10)
         }
 
-        if request.headers().iter().has("connection", "close") {
+        if request.headers().iter().has(header::CONNECTION, "close") {
             close_reason.push(CloseReason::ClientConnectionClose);
         }
 
@@ -585,7 +586,7 @@ impl<B> Flow<B, RecvResponse> {
             .last()
             .cloned();
 
-        if response.headers().iter().has("connection", "close") {
+        if response.headers().iter().has(header::CONNECTION, "close") {
             self.inner
                 .close_reason
                 .push(CloseReason::ServerConnectionClose);
@@ -806,10 +807,10 @@ impl<B> Flow<B, Redirect> {
         request.set_uri(uri);
 
         if !keep_auth_header {
-            request.unset_header("authorization")?;
+            request.unset_header(header::AUTHORIZATION)?;
         }
-        request.unset_header("cookie")?;
-        request.unset_header("content-length")?;
+        request.unset_header(header::COOKIE)?;
+        request.unset_header(header::CONTENT_LENGTH)?;
 
         // TODO(martin): clear out unwanted headers
 

@@ -1,4 +1,4 @@
-use http::{HeaderName, HeaderValue, Method, StatusCode, Version};
+use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
 
 use crate::Error;
 
@@ -43,17 +43,17 @@ impl MethodExt for Method {
 }
 
 pub(crate) trait HeaderIterExt {
-    fn has(self, key: &str, value: &str) -> bool;
+    fn has(self, key: HeaderName, value: &str) -> bool;
     fn has_expect_100(self) -> bool;
 }
 
 impl<'a, I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>> HeaderIterExt for I {
-    fn has(self, key: &str, value: &str) -> bool {
+    fn has(self, key: HeaderName, value: &str) -> bool {
         self.filter(|i| i.0 == key).any(|i| i.1 == value)
     }
 
     fn has_expect_100(self) -> bool {
-        self.has("expect", "100-continue")
+        self.has(header::EXPECT, "100-continue")
     }
 }
 

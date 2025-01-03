@@ -118,7 +118,7 @@ impl<State, B> Call<State, B> {
                 // We need an owned value to set the host header.
                 let host =
                     HeaderValue::from_str(host).map_err(|e| Error::BadHeader(e.to_string()))?;
-                self.request.set_header("Host", host)?;
+                self.request.set_header(header::HOST, host)?;
             }
         }
 
