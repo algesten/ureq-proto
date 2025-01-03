@@ -4,11 +4,13 @@ use std::fmt;
 use std::io::Write;
 use std::marker::PhantomData;
 
-use http::{HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version};
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
+use http::{header, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version};
 
 use crate::body::{BodyReader, BodyWriter};
 use crate::parser::{try_parse_partial_response, try_parse_response};
-use crate::util::{log_data, Writer};
+use crate::util::{log_data, AuthorityExt, Writer};
 use crate::{BodyMode, Error};
 
 use super::amended::AmendedRequest;
@@ -117,6 +119,15 @@ impl<State, B> Call<State, B> {
                 let host =
                     HeaderValue::from_str(host).map_err(|e| Error::BadHeader(e.to_string()))?;
                 self.request.set_header("Host", host)?;
+            }
+        }
+
+        if let Some(auth) = self.request.uri().authority() {
+            if let Some(user) = auth.username() {
+                let pass = auth.password().unwrap_or_default();
+                let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
+                let auth = format!("Basic {}", creds);
+                self.request.set_header(header::AUTHORIZATION, auth)?;
             }
         }
 
@@ -947,6 +958,38 @@ mod test {
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
-        assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test\r\nAuthorization: Basic bWFydGluOnNlY3JldA==\r\n\r\n");
+        assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic bWFydGluOnNlY3JldA==\r\n\r\n");
+    }
+
+    #[test]
+    fn username_uri() {
+        let req = Request::get("http://martin@f.test/page").body(()).unwrap();
+        let mut call = Call::without_body(req).unwrap();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(
+            s,
+            "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic bWFydGluOg==\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn password_uri() {
+        let req = Request::get("http://:secret@f.test/page").body(()).unwrap();
+        let mut call = Call::without_body(req).unwrap();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(
+            s,
+            "GET /page HTTP/1.1\r\nhost: f.test\r\nauthorization: Basic OnNlY3JldA==\r\n\r\n"
+        );
     }
 }
