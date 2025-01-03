@@ -934,4 +934,19 @@ mod test {
 
         assert_eq!(err, Error::BodyContentAfterFinish);
     }
+
+    #[test]
+    fn username_password_uri() {
+        let req = Request::get("http://martin:secret@f.test/page")
+            .body(())
+            .unwrap();
+        let mut call = Call::without_body(req).unwrap();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test\r\nAuthorization: Basic bWFydGluOnNlY3JldA==\r\n\r\n");
+    }
 }
