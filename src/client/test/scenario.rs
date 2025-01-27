@@ -119,7 +119,7 @@ impl Scenario {
         // use crate::client::test::TestSliceExt;
         // println!("{:?}", input.as_slice().as_str());
 
-        flow.try_response(&input).unwrap();
+        flow.try_response(&input, true).unwrap();
 
         match flow.proceed() {
             Some(RecvResponseResult::RecvBody(v)) => v,
@@ -132,7 +132,7 @@ impl Scenario {
 
         let input = write_response(&self.response);
 
-        flow.try_response(&input).unwrap();
+        flow.try_response(&input, true).unwrap();
 
         match flow.proceed().unwrap() {
             RecvResponseResult::Redirect(v) => v,
@@ -155,7 +155,7 @@ impl Scenario {
 
         let input = write_response(&self.response);
 
-        flow.try_response(&input).unwrap();
+        flow.try_response(&input, true).unwrap();
 
         match flow.proceed().unwrap() {
             RecvResponseResult::Redirect(v) => v.proceed(),

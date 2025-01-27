@@ -178,13 +178,13 @@
 //! // try_response can be used repeatedly until we
 //! // get enough content including all headers.
 //! let (input_used, maybe_response) =
-//!     flow.try_response(part).unwrap();
+//!     flow.try_response(part, false).unwrap();
 //!
 //! assert_eq!(input_used, 0);
 //! assert!(maybe_response.is_none());
 //!
 //! let (input_used, maybe_response) =
-//!     flow.try_response(full).unwrap();
+//!     flow.try_response(full, false).unwrap();
 //!
 //! assert_eq!(input_used, 38);
 //! let response = maybe_response.unwrap();

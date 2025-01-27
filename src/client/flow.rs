@@ -550,7 +550,9 @@ impl<B> Flow<B, SendBody> {
 impl<B> Flow<B, RecvResponse> {
     /// Try reading a response from the input.
     ///
-    /// This requires the entire response, including all headers to be present in the input buffer.
+    /// * `allow_partial_redirect` - if `true`, we can accept to find the `Location` header
+    ///   and proceed without reading the entire header. This is useful for broken servers that
+    ///   don't send an entire \r\n at the end of the preamble.
     ///
     /// The `(usize, Option<Response()>)` is `(input amount consumed, response`).
     ///
@@ -558,8 +560,16 @@ impl<B> Flow<B, RecvResponse> {
     /// a `Some(Response)`. This can happen if the server returned a 100-continue, and due to
     /// timing reasons we did not receive it while we were in the `Await100` flow state. This
     /// "spurios" 100 will be discarded before we parse the actual response.
-    pub fn try_response(&mut self, input: &[u8]) -> Result<(usize, Option<Response<()>>), Error> {
-        let maybe_response = self.inner.call.as_recv_response_mut().try_response(input)?;
+    pub fn try_response(
+        &mut self,
+        input: &[u8],
+        allow_partial_redirect: bool,
+    ) -> Result<(usize, Option<Response<()>>), Error> {
+        let maybe_response = self
+            .inner
+            .call
+            .as_recv_response_mut()
+            .try_response(input, allow_partial_redirect)?;
 
         let (input_used, response) = match maybe_response {
             Some(v) => v,
