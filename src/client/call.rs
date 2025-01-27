@@ -177,7 +177,7 @@ impl<State, B> Call<State, B> {
 }
 
 #[derive(Debug, Default)]
-struct BodyState {
+pub(crate) struct BodyState {
     phase: Phase,
     writer: BodyWriter,
     reader: Option<BodyReader>,

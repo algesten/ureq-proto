@@ -252,8 +252,41 @@ mod holder;
 #[cfg(test)]
 mod test;
 
-/// Max number of additional headers to amend an HTTP request with
-pub const MAX_EXTRA_HEADERS: usize = 64;
-
 /// Max number of headers to parse from an HTTP response
 pub const MAX_RESPONSE_HEADERS: usize = 128;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use amended::AmendedRequest;
+    use call::state::WithBody;
+    use call::{BodyState, Call};
+    use flow::state::SendRequest;
+    use flow::{Flow, Inner};
+    use holder::CallHolder;
+
+    #[test]
+    fn ensure_reasonable_stack_sizes() {
+        macro_rules! ensure {
+            ($type:ty, $size:tt) => {
+                let sz = std::mem::size_of::<$type>();
+                assert!(
+                    sz <= $size,
+                    "Stack size of {} is too big {} > {}",
+                    stringify!($type),
+                    sz,
+                    $size
+                );
+            };
+        }
+
+        ensure!(http::Request<()>, 300); // 224
+        ensure!(BodyState, 100);
+        ensure!(AmendedRequest<()>, 400); // 368
+        ensure!(Call<WithBody, ()>, 500); // 440
+        ensure!(CallHolder<()>, 500); // 448
+        ensure!(Inner<()>, 600); // 512
+        ensure!(Flow<(), SendRequest>, 600); // 512
+    }
+}

@@ -5,10 +5,8 @@ use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Ver
 
 use crate::body::BodyWriter;
 use crate::ext::MethodExt;
-use crate::util::{compare_lowercase_ascii, ArrayVec};
+use crate::util::compare_lowercase_ascii;
 use crate::Error;
-
-use super::MAX_EXTRA_HEADERS;
 
 /// `Request` with amends.
 ///
@@ -38,22 +36,19 @@ use super::MAX_EXTRA_HEADERS;
 pub(crate) struct AmendedRequest<Body> {
     request: Request<Option<Body>>,
     uri: Option<Uri>,
-    headers: ArrayVec<(HeaderName, HeaderValue), MAX_EXTRA_HEADERS>,
-    unset: ArrayVec<HeaderName, 3>,
+    headers: Vec<(HeaderName, HeaderValue)>,
+    unset: Vec<HeaderName>,
 }
 
 impl<Body> AmendedRequest<Body> {
     pub fn new(request: Request<Body>) -> Self {
         let (parts, body) = request.into_parts();
 
-        const UNINIT_NAME: HeaderName = HeaderName::from_static("x-null");
-        const UNINIT_VALUE: HeaderValue = HeaderValue::from_static("");
-
         AmendedRequest {
             request: Request::from_parts(parts, Some(body)),
             uri: None,
-            headers: ArrayVec::from_fn(|_| (UNINIT_NAME, UNINIT_VALUE)),
-            unset: ArrayVec::from_fn(|_| UNINIT_NAME),
+            headers: vec![],
+            unset: vec![],
         }
     }
 

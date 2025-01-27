@@ -76,7 +76,7 @@ pub fn try_parse_response<const N: usize>(
 pub fn try_parse_partial_response<const N: usize>(
     input: &[u8],
 ) -> Result<Option<Response<()>>, Error> {
-    let mut headers = [httparse::EMPTY_HEADER; N]; // 100 headers ~3kb
+    let mut headers = vec![httparse::EMPTY_HEADER; N]; // 100 headers ~3kb
 
     let mut res = httparse::Response::new(&mut headers);
 
