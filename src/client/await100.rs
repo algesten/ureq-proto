@@ -4,7 +4,8 @@ use crate::parser::try_parse_response;
 use crate::Error;
 
 use super::state::Await100;
-use super::{Await100Result, Call, CloseReason};
+use super::{Await100Result, Call};
+use crate::CloseReason;
 
 impl<B> Call<B, Await100> {
     /// Attempt to read a 100-continue response.

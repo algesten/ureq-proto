@@ -4,6 +4,7 @@ use std::io::Write;
 use http::{header, HeaderName, HeaderValue, Method};
 
 use crate::chunk::Dechunker;
+use crate::ext::MethodExt;
 use crate::util::{compare_lowercase_ascii, log_data, Writer};
 use crate::Error;
 
@@ -252,25 +253,30 @@ impl BodyReader {
         }
     }
 
-    // pub fn for_request<'a>(
-    //     http10: bool,
-    //     method: &Method,
-    //     header_lookup: &'a dyn Fn(&str) -> Option<&'a str>,
-    // ) -> Result<Self, Error> {
-    //     let has_no_body = !method.need_request_body();
+    pub fn for_request<'a>(
+        http10: bool,
+        method: &Method,
+        header_lookup: &'a dyn Fn(http::HeaderName) -> Option<&'a str>,
+    ) -> Result<Self, Error> {
+        let has_no_body = !method.need_request_body();
 
-    //     if has_no_body {
-    //         return Ok(Self::LengthDelimited(0));
-    //     }
+        if has_no_body {
+            let mode = if http10 {
+                Self::CloseDelimited
+            } else {
+                Self::LengthDelimited(0)
+            };
+            return Ok(mode);
+        }
 
-    //     let ret = match Self::header_defined(http10, header_lookup)? {
-    //         // Request bodies cannot be close delimited (even under http10).
-    //         Self::CloseDelimited => Self::LengthDelimited(0),
-    //         r @ _ => r,
-    //     };
+        let ret = match Self::header_defined(http10, header_lookup)? {
+            // Request bodies cannot be close delimited (even under http10).
+            Self::CloseDelimited => Self::LengthDelimited(0),
+            r @ _ => r,
+        };
 
-    //     Ok(ret)
-    // }
+        Ok(ret)
+    }
 
     pub fn for_response<'a>(
         http10: bool,

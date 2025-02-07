@@ -230,8 +230,12 @@ fn do_write_send_line(line: (&Method, &str, Version), w: &mut Writer) -> bool {
     w.try_write(|w| write!(w, "{} {} {:?}\r\n", line.0, line.1, line.2))
 }
 
-fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
-where
+pub(crate) fn do_write_headers<'a, I>(
+    headers: I,
+    index: &mut usize,
+    last_index: usize,
+    w: &mut Writer,
+) where
     I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
 {
     for h in headers {

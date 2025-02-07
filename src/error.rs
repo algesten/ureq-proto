@@ -1,6 +1,6 @@
 use std::fmt;
 
-use http::{Method, Version};
+use http::{Method, StatusCode, Version};
 
 /// Error type for ureq-proto
 #[derive(Debug, PartialEq, Eq)]
@@ -27,6 +27,7 @@ pub enum Error {
     BadLocationHeader(String),
     HeadersWith100,
     BodyIsChunked,
+    BadReject100Status(StatusCode),
 }
 
 impl From<httparse::Error> for Error {
@@ -66,6 +67,9 @@ impl fmt::Display for Error {
             Error::BadLocationHeader(v) => write!(f, "location header is malformed: {}", v),
             Error::HeadersWith100 => write!(f, "received headers with 100-continue response"),
             Error::BodyIsChunked => write!(f, "body is chunked"),
+            Error::BadReject100Status(v) => {
+                write!(f, "expect-100 must be rejected with 4xx or 5xx: {}", v)
+            }
         }
     }
 }
