@@ -5,6 +5,7 @@ use http::{Method, Version};
 /// Error type for ureq-proto
 #[derive(Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum Error {
     BadHeader(String),
     UnsupportedVersion,
