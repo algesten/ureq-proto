@@ -110,9 +110,11 @@ impl<State, B> Call<State, B> {
             return Ok(());
         }
 
-        let info = self
-            .request
-            .analyze(self.state.writer, self.state.skip_method_body_check)?;
+        let info = self.request.analyze(
+            self.state.writer,
+            self.state.skip_method_body_check,
+            self.state.allow_non_standard_methods,
+        )?;
 
         if !info.req_host_header {
             if let Some(host) = self.request.uri().host() {
@@ -206,6 +208,7 @@ pub(crate) struct BodyState {
     writer: BodyWriter,
     reader: Option<BodyReader>,
     skip_method_body_check: bool,
+    allow_non_standard_methods: bool,
     stop_on_chunk_boundary: bool,
 }
 
@@ -255,6 +258,15 @@ impl<B> Call<WithoutBody, B> {
             state: self.state,
             _ph: PhantomData,
         }
+    }
+
+    /// Set whether to allow non-standard HTTP methods.
+    ///
+    /// By default the methods are limited by the HTTP version.
+    ///
+    /// Must be set before calling write()
+    pub fn allow_non_standard_methods(&mut self, v: bool) {
+        self.state.allow_non_standard_methods = v;
     }
 
     /// Write the request to the output buffer
@@ -388,6 +400,15 @@ impl<B> Call<WithBody, B> {
 
     pub(crate) fn is_chunked(&self) -> bool {
         self.state.writer.is_chunked()
+    }
+
+    /// Set whether to allow non-standard HTTP methods.
+    ///
+    /// By default the methods are limited by the HTTP version.
+    ///
+    /// Must be set before calling write()
+    pub fn allow_non_standard_methods(&mut self, v: bool) {
+        self.state.allow_non_standard_methods = v;
     }
 
     /// Tell if the request and body has been sent.
@@ -1067,5 +1088,45 @@ mod test {
         let s = str::from_utf8(&output[..n]).unwrap();
 
         assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test:8080\r\n\r\n");
+    }
+
+    #[test]
+    fn non_standard_method_not_allowed() {
+        let m = Method::from_bytes(b"FNORD").unwrap();
+
+        let req = Request::builder()
+            .method(m.clone())
+            .uri("http://f.test:8080/page")
+            .body(())
+            .unwrap();
+
+        let mut call = Call::without_body(req).unwrap();
+
+        let mut output = vec![0; 1024];
+        let err = call.write(&mut output).unwrap_err();
+
+        assert_eq!(err, Error::MethodVersionMismatch(m, Version::HTTP_11));
+    }
+
+    #[test]
+    fn non_standard_method_when_allowed() {
+        let m = Method::from_bytes(b"FNORD").unwrap();
+
+        let req = Request::builder()
+            .method(m.clone())
+            .uri("http://f.test:8080/page")
+            .body(())
+            .unwrap();
+
+        let mut call = Call::without_body(req).unwrap();
+
+        call.allow_non_standard_methods(true);
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(s, "FNORD /page HTTP/1.1\r\nhost: f.test:8080\r\n\r\n");
     }
 }

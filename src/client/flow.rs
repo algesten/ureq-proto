@@ -198,6 +198,13 @@ impl<B> Flow<B, Prepare> {
         self.call().request().original_request_headers()
     }
 
+    /// Set whether to allow non-standard HTTP methods.
+    ///
+    /// By default the methods are limited by the HTTP version.
+    pub fn allow_non_standard_methods(&mut self, v: bool) {
+        self.call_mut().allow_non_standard_methods(v);
+    }
+
     /// Add more headers to the call
     pub fn header<K, V>(&mut self, key: K, value: V) -> Result<(), Error>
     where
