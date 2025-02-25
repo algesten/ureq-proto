@@ -165,11 +165,14 @@ impl<Body> AmendedRequest<Body> {
         &self,
         wanted_mode: BodyWriter,
         skip_method_body_check: bool,
+        allow_non_standard_methods: bool,
     ) -> Result<RequestInfo, Error> {
         let v = self.request.version();
         let m = self.method();
 
-        m.verify_version(v)?;
+        if !allow_non_standard_methods {
+            m.verify_version(v)?;
+        }
 
         let count_host = self.headers_get_all(header::HOST).count();
         if count_host > 1 {

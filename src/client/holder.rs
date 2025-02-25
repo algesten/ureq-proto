@@ -126,4 +126,12 @@ impl<B> CallHolder<B> {
         let call = call.into_send_body();
         let _ = mem::replace(self, CallHolder::WithBody(call));
     }
+
+    pub(crate) fn allow_non_standard_methods(&mut self, v: bool) {
+        match self {
+            CallHolder::WithoutBody(c) => c.allow_non_standard_methods(v),
+            CallHolder::WithBody(c) => c.allow_non_standard_methods(v),
+            _ => unreachable!(),
+        }
+    }
 }
