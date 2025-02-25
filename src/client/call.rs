@@ -6,9 +6,11 @@ use std::marker::PhantomData;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use http::{header, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Version};
+use http::uri::Scheme;
+use http::{header, HeaderName, HeaderValue, Method, Request, Response, StatusCode, Uri, Version};
 
 use crate::body::{BodyReader, BodyWriter};
+use crate::ext::SchemeExt;
 use crate::parser::{try_parse_partial_response, try_parse_response};
 use crate::util::{log_data, AuthorityExt, Writer};
 use crate::{BodyMode, Error};
@@ -116,9 +118,11 @@ impl<State, B> Call<State, B> {
             if let Some(host) = self.request.uri().host() {
                 // User did not set a host header, and there is one in uri, we set that.
                 // We need an owned value to set the host header.
-                let host =
-                    HeaderValue::from_str(host).map_err(|e| Error::BadHeader(e.to_string()))?;
-                self.request.set_header(header::HOST, host)?;
+
+                // This might append the port if it differs from the scheme default.
+                let value = maybe_with_port(host, self.request.uri())?;
+
+                self.request.set_header(header::HOST, value)?;
             }
         }
 
@@ -174,6 +178,26 @@ impl<State, B> Call<State, B> {
             .map(|r| r.body_mode())
             .unwrap_or(BodyMode::Chunked)
     }
+}
+
+fn maybe_with_port(host: &str, uri: &Uri) -> Result<HeaderValue, Error> {
+    fn from_str(src: &str) -> Result<HeaderValue, Error> {
+        HeaderValue::from_str(src).map_err(|e| Error::BadHeader(e.to_string()))
+    }
+
+    if let Some(port) = uri.port() {
+        let scheme = uri.scheme().unwrap_or(&Scheme::HTTP);
+        if let Some(scheme_default) = scheme.default_port() {
+            if port != scheme_default {
+                // This allocates, so we only do it if we absolutely have to.
+                let host_port = format!("{}:{}", host, port);
+                return from_str(&host_port);
+            }
+        }
+    }
+
+    // Fall back on no port (without allocating).
+    from_str(host)
 }
 
 #[derive(Debug, Default)]
@@ -1030,5 +1054,18 @@ mod test {
             "GET /page HTTP/1.1\r\nhost: f.test\r\n\
                 authorization: meh meh meh\r\n\r\n"
         );
+    }
+
+    #[test]
+    fn non_standard_port() {
+        let req = Request::get("http://f.test:8080/page").body(()).unwrap();
+        let mut call = Call::without_body(req).unwrap();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(s, "GET /page HTTP/1.1\r\nhost: f.test:8080\r\n\r\n");
     }
 }
