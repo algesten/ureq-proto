@@ -315,7 +315,7 @@ fn keep_auth_header_same_host() {
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\
-            host: a.test\r\n\
+            host: a.test:234\r\n\
             authorization: some secret\r\n\
             \r\n";
     assert_eq!(o[..n].as_str(), cmp);

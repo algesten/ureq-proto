@@ -1,3 +1,4 @@
+use http::uri::Scheme;
 use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
 
 use crate::Error;
@@ -65,5 +66,22 @@ pub(crate) trait StatusExt {
 impl StatusExt for StatusCode {
     fn is_redirect_retaining_status(&self) -> bool {
         *self == StatusCode::TEMPORARY_REDIRECT || *self == StatusCode::PERMANENT_REDIRECT
+    }
+}
+
+pub trait SchemeExt {
+    fn default_port(&self) -> Option<u16>;
+}
+
+impl SchemeExt for Scheme {
+    fn default_port(&self) -> Option<u16> {
+        if *self == Scheme::HTTPS {
+            Some(443)
+        } else if *self == Scheme::HTTP {
+            Some(80)
+        } else {
+            debug!("Unknown scheme: {}", self);
+            None
+        }
     }
 }
