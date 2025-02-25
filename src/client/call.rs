@@ -18,22 +18,17 @@ use crate::{BodyMode, Error};
 use super::amended::AmendedRequest;
 use super::MAX_RESPONSE_HEADERS;
 
-#[doc(hidden)]
 pub mod state {
     /// Type state for requests without bodies via [`Call::without_body()`]
-    #[doc(hidden)]
     pub struct WithoutBody(());
 
     /// Type state for streaming bodies via [`Call::with_streaming_body()`]
-    #[doc(hidden)]
     pub struct WithBody(());
 
     /// Type state for receiving the HTTP Response
-    #[doc(hidden)]
     pub struct RecvResponse(());
 
     /// Type state for receiving the response body
-    #[doc(hidden)]
     pub struct RecvBody(());
 }
 use self::state::*;
@@ -53,6 +48,7 @@ use self::state::*;
 ///
 pub struct Call<State, B> {
     request: AmendedRequest<B>,
+    phase: Phase,
     analyzed: bool,
     state: BodyState,
     _ph: PhantomData<State>,
@@ -63,13 +59,6 @@ impl<B> Call<(), B> {
     ///
     /// Methods like `HEAD` and `GET` do not use a request body. This creates
     /// a [`Call`] instance that does not expect a user provided body.
-    ///
-    /// ```
-    /// # use ureq_proto::client::call::Call;
-    /// # use ureq_proto::http::Request;
-    /// let req = Request::head("http://foo.test/page").body(()).unwrap();
-    /// Call::without_body(req).unwrap();
-    /// ```
     pub fn without_body(request: Request<B>) -> Result<Call<WithoutBody, B>, Error> {
         Call::new(request, BodyWriter::new_none())
     }
@@ -78,13 +67,6 @@ impl<B> Call<(), B> {
     ///
     /// Methods like `POST` and `PUT` expects a request body. This must be
     /// used even if the body is zero-sized (`content-length: 0`).
-    ///
-    /// ```
-    /// # use ureq_proto::client::call::Call;
-    /// # use ureq_proto::http::Request;
-    /// let req = Request::put("http://foo.test/path").body(()).unwrap();
-    /// Call::with_body(req).unwrap();
-    /// ```
     pub fn with_body(request: Request<B>) -> Result<Call<WithBody, B>, Error> {
         Call::new(request, BodyWriter::new_chunked())
     }
@@ -96,6 +78,7 @@ impl<State, B> Call<State, B> {
 
         Ok(Call {
             request,
+            phase: Phase::SendLine,
             analyzed: false,
             state: BodyState {
                 writer: default_body_mode,
@@ -105,7 +88,7 @@ impl<State, B> Call<State, B> {
         })
     }
 
-    pub(crate) fn analyze_request(&mut self) -> Result<(), Error> {
+    pub fn analyze_request(&mut self) -> Result<(), Error> {
         if self.analyzed {
             return Ok(());
         }
@@ -157,24 +140,22 @@ impl<State, B> Call<State, B> {
 
         Ok(Call {
             request: self.request,
+            phase: Phase::RecvResponse,
             analyzed: self.analyzed,
-            state: BodyState {
-                phase: Phase::RecvResponse,
-                ..self.state
-            },
+            state: BodyState { ..self.state },
             _ph: PhantomData,
         })
     }
 
-    pub(crate) fn amended(&self) -> &AmendedRequest<B> {
+    pub fn amended(&self) -> &AmendedRequest<B> {
         &self.request
     }
 
-    pub(crate) fn amended_mut(&mut self) -> &mut AmendedRequest<B> {
+    pub fn amended_mut(&mut self) -> &mut AmendedRequest<B> {
         &mut self.request
     }
 
-    pub(crate) fn body_mode(&self) -> BodyMode {
+    pub fn body_mode(&self) -> BodyMode {
         self.state
             .reader
             .map(|r| r.body_mode())
@@ -203,8 +184,7 @@ fn maybe_with_port(host: &str, uri: &Uri) -> Result<HeaderValue, Error> {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct BodyState {
-    phase: Phase,
+pub struct BodyState {
     writer: BodyWriter,
     reader: Option<BodyReader>,
     skip_method_body_check: bool,
@@ -230,12 +210,6 @@ enum Phase {
     RecvBody,
 }
 
-impl Default for Phase {
-    fn default() -> Self {
-        Self::SendLine
-    }
-}
-
 impl Phase {
     fn is_prelude(&self) -> bool {
         matches!(self, Phase::SendLine | Phase::SendHeaders(_))
@@ -247,13 +221,14 @@ impl Phase {
 }
 
 impl<B> Call<WithoutBody, B> {
-    pub(crate) fn into_send_body(mut self) -> Call<WithBody, B> {
+    pub fn into_send_body(mut self) -> Call<WithBody, B> {
         assert!(!self.analyzed);
 
         self.state.skip_method_body_check = true;
 
         Call {
             request: self.request,
+            phase: self.phase,
             analyzed: self.analyzed,
             state: self.state,
             _ph: PhantomData,
@@ -272,24 +247,11 @@ impl<B> Call<WithoutBody, B> {
     /// Write the request to the output buffer
     ///
     /// Returns how much of the output buffer that was used.
-    ///
-    /// ```
-    /// # use ureq_proto::client::call::Call;
-    /// # use ureq_proto::http::Request;
-    /// let req = Request::head("http://foo.test/page").body(()).unwrap();
-    /// let mut call = Call::without_body(req).unwrap();
-    ///
-    /// let mut output = vec![0; 1024];
-    /// let n = call.write(&mut output).unwrap();
-    /// let s = std::str::from_utf8(&output[..n]).unwrap();
-    ///
-    /// assert_eq!(s, "HEAD /page HTTP/1.1\r\nhost: foo.test\r\n\r\n");
-    /// ```
     pub fn write(&mut self, output: &mut [u8]) -> Result<usize, Error> {
         self.analyze_request()?;
 
         let mut w = Writer::new(output);
-        try_write_prelude(&self.request, &mut self.state, &mut w)?;
+        try_write_prelude(&self.request, &mut self.phase, &mut w)?;
 
         let output_used = w.len();
 
@@ -298,7 +260,7 @@ impl<B> Call<WithoutBody, B> {
 
     /// Whether the request has been fully written.
     pub fn is_finished(&self) -> bool {
-        !self.state.phase.is_prelude()
+        !self.phase.is_prelude()
     }
 
     /// Proceed to receiving a response
@@ -322,34 +284,6 @@ impl<B> Call<WithBody, B> {
     ///
     /// Returns `(usize, usize)` where the first number is how many bytes of the `input` that
     /// were consumed. The second number is how many bytes of the `output` that were used.
-    ///
-    /// ```
-    /// # use ureq_proto::client::call::Call;
-    /// # use ureq_proto::http::Request;
-    /// let req = Request::post("http://f.test/page")
-    ///     .header("transfer-encoding", "chunked")
-    ///     .body(())
-    ///     .unwrap();
-    /// let mut call = Call::with_body(req).unwrap();
-    ///
-    /// let body = b"hallo";
-    ///
-    /// // Send body
-    /// let mut output = vec![0; 1024];
-    /// let (_, n1) = call.write(body, &mut output).unwrap(); // send headers
-    /// let (i, n2) = call.write(body, &mut output[n1..]).unwrap(); // send body
-    /// assert_eq!(i, 5);
-    ///
-    /// // Indicate the body is finished by sending &[]
-    /// let (_, n3) = call.write(&[], &mut output[n1 + n2..]).unwrap();
-    /// let s = std::str::from_utf8(&output[..n1 + n2 + n3]).unwrap();
-    ///
-    /// assert_eq!(
-    ///     s,
-    ///     "POST /page HTTP/1.1\r\nhost: f.test\r\n\
-    ///     transfer-encoding: chunked\r\n\r\n5\r\nhallo\r\n0\r\n\r\n"
-    /// );
-    /// ```
     pub fn write(&mut self, input: &[u8], output: &mut [u8]) -> Result<(usize, usize), Error> {
         self.analyze_request()?;
 
@@ -358,7 +292,7 @@ impl<B> Call<WithBody, B> {
         let mut input_used = 0;
 
         if self.is_prelude() {
-            try_write_prelude(&self.request, &mut self.state, &mut w)?;
+            try_write_prelude(&self.request, &mut self.phase, &mut w)?;
         } else if self.is_body() {
             if !input.is_empty() && self.state.writer.is_ended() {
                 return Err(Error::BodyContentAfterFinish);
@@ -376,7 +310,7 @@ impl<B> Call<WithBody, B> {
         Ok((input_used, output_used))
     }
 
-    pub(crate) fn consume_direct_write(&mut self, amount: usize) -> Result<(), Error> {
+    pub fn consume_direct_write(&mut self, amount: usize) -> Result<(), Error> {
         if let Some(left) = self.state.writer.left_to_send() {
             if amount as u64 > left {
                 return Err(Error::BodyLargerThanContentLength);
@@ -390,15 +324,15 @@ impl<B> Call<WithBody, B> {
         Ok(())
     }
 
-    pub(crate) fn is_prelude(&self) -> bool {
-        self.state.phase.is_prelude()
+    pub fn is_prelude(&self) -> bool {
+        self.phase.is_prelude()
     }
 
-    pub(crate) fn is_body(&self) -> bool {
-        self.state.phase.is_body()
+    pub fn is_body(&self) -> bool {
+        self.phase.is_body()
     }
 
-    pub(crate) fn is_chunked(&self) -> bool {
+    pub fn is_chunked(&self) -> bool {
         self.state.writer.is_chunked()
     }
 
@@ -427,19 +361,19 @@ impl<B> Call<WithBody, B> {
 
 fn try_write_prelude<B>(
     request: &AmendedRequest<B>,
-    state: &mut BodyState,
+    phase: &mut Phase,
     w: &mut Writer,
 ) -> Result<(), Error> {
     let at_start = w.len();
 
     loop {
-        if try_write_prelude_part(request, state, w) {
+        if try_write_prelude_part(request, phase, w) {
             continue;
         }
 
         let written = w.len() - at_start;
 
-        if written > 0 || state.phase.is_body() {
+        if written > 0 || phase.is_body() {
             return Ok(());
         } else {
             return Err(Error::OutputOverflow);
@@ -449,14 +383,14 @@ fn try_write_prelude<B>(
 
 fn try_write_prelude_part<Body>(
     request: &AmendedRequest<Body>,
-    state: &mut BodyState,
+    phase: &mut Phase,
     w: &mut Writer,
 ) -> bool {
-    match &mut state.phase {
+    match phase {
         Phase::SendLine => {
             let success = do_write_send_line(request.prelude(), w);
             if success {
-                state.phase = Phase::SendHeaders(0);
+                *phase = Phase::SendHeaders(0);
             }
             success
         }
@@ -469,7 +403,7 @@ fn try_write_prelude_part<Body>(
             do_write_headers(skipped, index, header_count - 1, w);
 
             if *index == header_count {
-                state.phase = Phase::SendBody;
+                *phase = Phase::SendBody;
             }
             false
         }
@@ -483,7 +417,7 @@ fn do_write_send_line(line: (&Method, &str, Version), w: &mut Writer) -> bool {
     w.try_write(|w| write!(w, "{} {} {:?}\r\n", line.0, line.1, line.2))
 }
 
-fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
+pub fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
 where
     I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
 {
@@ -592,39 +526,16 @@ impl<B> Call<RecvResponse, B> {
         self.state.reader.is_some()
     }
 
-    /// Continue reading the response body
-    ///
-    /// Errors if called before [`Call::try_response()`] has produced a [`Response`].
-    ///
-    /// Returns `None` if there is no body such as the response to a `HEAD` request.
-    pub fn into_body(self) -> Result<Option<Call<RecvBody, B>>, Error> {
-        let rbm = match &self.state.reader {
-            Some(v) => v,
-            None => return Err(Error::IncompleteResponse),
-        };
-
-        // No body is expected either due to Method or status. Call ends here.
-        if matches!(rbm, BodyReader::NoBody) {
-            return Ok(None);
-        }
-
-        let next = self.do_into_body();
-
-        Ok(Some(next))
-    }
-
-    pub(crate) fn need_response_body(&self) -> bool {
+    pub fn need_response_body(&self) -> bool {
         self.state.need_response_body()
     }
 
-    pub(crate) fn do_into_body(self) -> Call<RecvBody, B> {
+    pub fn into_body(self) -> Call<RecvBody, B> {
         Call {
             request: self.request,
+            phase: Phase::RecvBody,
             analyzed: self.analyzed,
-            state: BodyState {
-                phase: Phase::RecvBody,
-                ..self.state
-            },
+            state: BodyState { ..self.state },
             _ph: PhantomData,
         }
     }
@@ -687,9 +598,7 @@ impl<B> Call<RecvBody, B> {
 
 impl<State, B> fmt::Debug for Call<State, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Call")
-            .field("phase", &self.state.phase)
-            .finish()
+        f.debug_struct("Call").field("phase", &self.phase).finish()
     }
 }
 

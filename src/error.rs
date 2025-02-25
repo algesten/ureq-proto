@@ -1,6 +1,6 @@
 use std::fmt;
 
-use http::{Method, Version};
+use http::{Method, StatusCode, Version};
 
 /// Error type for ureq-proto
 #[derive(Debug, PartialEq, Eq)]
@@ -36,6 +36,7 @@ pub enum Error {
     BodyIsChunked,
     RequestMissingMethod,
     RequestInvalidMethod,
+    BadReject100Status(StatusCode),
 }
 
 impl From<httparse::Error> for Error {
@@ -84,6 +85,9 @@ impl fmt::Display for Error {
             Error::BodyIsChunked => write!(f, "body is chunked"),
             Error::RequestMissingMethod => write!(f, "http request is missing a method"),
             Error::RequestInvalidMethod => write!(f, "http request invalid method"),
+            Error::BadReject100Status(v) => {
+                write!(f, "expect-100 must be rejected with 4xx or 5xx: {}", v)
+            }
         }
     }
 }
