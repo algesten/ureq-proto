@@ -94,10 +94,9 @@ pub fn try_parse_partial_response<const N: usize>(
     };
 
     let version = {
-        let v = res.version.ok_or(Error::MissingResponseVersion)?;
-        match v {
-            0 => Version::HTTP_10,
-            1 => Version::HTTP_11,
+        match res.version {
+            Some(0) => Version::HTTP_10,
+            Some(1) => Version::HTTP_11,
             _ => return Ok(None),
         }
     };
