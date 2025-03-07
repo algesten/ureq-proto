@@ -1,7 +1,7 @@
 use http::{Request, Response, StatusCode, Version};
 
-use crate::client::flow::CloseReason;
 use crate::client::test::scenario::write_response;
+use crate::CloseReason;
 
 use super::scenario::Scenario;
 

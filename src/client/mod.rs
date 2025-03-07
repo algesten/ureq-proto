@@ -58,7 +58,7 @@
 //! # Example
 //!
 //! ```
-//! use ureq_proto::client::flow::*;
+//! use ureq_proto::client::*;
 //! use ureq_proto::http::Request;
 //!
 //! let request = Request::put("https://example.test/my-path")
@@ -241,13 +241,14 @@
 //! Based on the [http crate](https://crates.io/crates/http) - a unified HTTP API for Rust.
 //!
 
-pub mod call;
-
-pub mod flow;
-
 mod amended;
-
+mod call;
+mod flow;
 mod holder;
+
+pub(crate) use call::do_write_headers;
+
+pub use flow::*;
 
 #[cfg(test)]
 mod test;
