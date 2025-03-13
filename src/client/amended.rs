@@ -229,7 +229,9 @@ impl<Body> AmendedRequest<Body> {
             wanted_mode
         };
 
-        if !skip_method_body_check {
+        let enforce_body_method = !allow_non_standard_methods && !skip_method_body_check;
+
+        if enforce_body_method {
             let need_body = self.method().need_request_body();
             let has_body = body_mode.has_body();
 
