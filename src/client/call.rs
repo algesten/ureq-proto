@@ -267,6 +267,7 @@ impl<B> Call<WithoutBody, B> {
     /// Must be set before calling write()
     pub fn allow_non_standard_methods(&mut self, v: bool) {
         self.state.allow_non_standard_methods = v;
+        self.state.skip_method_body_check = v;
     }
 
     /// Write the request to the output buffer
@@ -409,6 +410,7 @@ impl<B> Call<WithBody, B> {
     /// Must be set before calling write()
     pub fn allow_non_standard_methods(&mut self, v: bool) {
         self.state.allow_non_standard_methods = v;
+        self.state.skip_method_body_check = v;
     }
 
     /// Tell if the request and body has been sent.
