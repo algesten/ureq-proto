@@ -112,7 +112,6 @@ impl<B> Flow<B, SendRequest> {
         if self.inner.analyzed {
             return Ok(());
         }
-
         let info = self.inner.request.analyze(
             self.inner.state.writer,
             self.inner.state.allow_non_standard_methods,
