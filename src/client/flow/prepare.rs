@@ -88,14 +88,18 @@ impl<B> Flow<B, Prepare> {
         self.inner.request.set_header(key, value)
     }
 
-    /// Convert the call to send body despite method.
+    /// Convert the to send body despite method.
     ///
     /// Methods like GET, HEAD and DELETE should not have a request body.
     /// Some broken APIs use bodies anyway, and this is an escape hatch to
     /// interoperate with such services.
     pub fn send_body_despite_method(&mut self) {
         self.inner.should_send_body = true;
-        self.inner.state.skip_method_body_check = true;
+        self.inner.state = BodyState {
+            writer: BodyWriter::new_chunked(),
+            skip_method_body_check: true,
+            ..Default::default()
+        };
     }
 
     /// Continue to the next flow state.
