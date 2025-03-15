@@ -241,13 +241,13 @@
 //! Based on the [http crate](https://crates.io/crates/http) - a unified HTTP API for Rust.
 //!
 
-pub mod call;
+// pub mod call;
 
 pub mod flow;
 
 mod amended;
 
-mod holder;
+// mod holder;
 
 #[cfg(test)]
 mod test;
@@ -260,11 +260,8 @@ mod tests {
     use super::*;
 
     use amended::AmendedRequest;
-    use call::state::WithBody;
-    use call::{BodyState, Call};
     use flow::state::SendRequest;
     use flow::{Flow, Inner};
-    use holder::CallHolder;
 
     #[test]
     fn ensure_reasonable_stack_sizes() {
@@ -282,10 +279,7 @@ mod tests {
         }
 
         ensure!(http::Request<()>, 300); // 224
-        ensure!(BodyState, 100);
         ensure!(AmendedRequest<()>, 400); // 368
-        ensure!(Call<WithBody, ()>, 500); // 440
-        ensure!(CallHolder<()>, 500); // 448
         ensure!(Inner<()>, 600); // 512
         ensure!(Flow<(), SendRequest>, 600); // 512
     }

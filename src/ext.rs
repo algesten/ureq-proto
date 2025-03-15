@@ -29,7 +29,7 @@ impl MethodExt for Method {
     }
 
     fn verify_version(&self, v: Version) -> Result<(), Error> {
-        if v == Version::HTTP_10 && v == Version::HTTP_11 {
+        if v != Version::HTTP_10 && v != Version::HTTP_11 {
             return Err(Error::UnsupportedVersion);
         }
 
