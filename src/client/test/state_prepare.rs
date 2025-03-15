@@ -7,7 +7,7 @@ fn proceed_without_amended_headers() {
     let flow = scenario.to_prepare();
 
     let inner = flow.inner();
-    let request = inner.call.request();
+    let request = &inner.request;
 
     assert_eq!(request.headers_vec(), []);
 
@@ -24,7 +24,7 @@ fn proceed_with_amended_headers() {
     flow.header("Cookie", "name2=baz").unwrap();
 
     let inner = flow.inner();
-    let request = inner.call.request();
+    let request = &inner.request;
 
     assert_eq!(
         request.headers_vec(),

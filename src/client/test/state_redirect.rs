@@ -252,7 +252,7 @@ fn change_redirect_methods() {
                 .unwrap();
             if let Some(state) = maybe_state {
                 let inner = state.inner();
-                let method = inner.call.request().method();
+                let method = inner.request.method();
                 assert_eq!(
                     method,
                     method_to.clone().unwrap(),

@@ -1,4 +1,4 @@
-use std::mem;
+use std::{fmt, mem};
 
 use http::uri::PathAndQuery;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version};
@@ -337,6 +337,17 @@ pub(crate) struct RequestInfo {
     pub req_host_header: bool,
     pub req_auth_header: bool,
     pub req_body_header: bool,
+}
+
+impl<B> fmt::Debug for AmendedRequest<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AmendedRequest")
+            .field("method", &self.request.method())
+            .field("uri", &self.uri)
+            .field("headers", &self.headers)
+            .field("unset", &self.unset)
+            .finish()
+    }
 }
 
 #[cfg(test)]
