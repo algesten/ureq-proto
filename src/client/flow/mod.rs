@@ -74,7 +74,6 @@ pub(crate) struct BodyState {
     phase: RequestPhase,
     writer: BodyWriter,
     reader: Option<BodyReader>,
-    skip_method_body_check: bool,
     allow_non_standard_methods: bool,
     stop_on_chunk_boundary: bool,
 }

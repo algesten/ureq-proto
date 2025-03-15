@@ -164,7 +164,6 @@ impl<Body> AmendedRequest<Body> {
     pub fn analyze(
         &self,
         wanted_mode: BodyWriter,
-        skip_method_body_check: bool,
         allow_non_standard_methods: bool,
     ) -> Result<RequestInfo, Error> {
         let v = self.request.version();
@@ -229,18 +228,7 @@ impl<Body> AmendedRequest<Body> {
             wanted_mode
         };
 
-        let enforce_body_method = !allow_non_standard_methods && !skip_method_body_check;
-
-        if enforce_body_method {
-            let need_body = self.method().need_request_body();
-            let has_body = body_mode.has_body();
-
-            if !need_body && has_body {
-                return Err(Error::MethodForbidsBody(self.method().clone()));
-            } else if need_body && !has_body {
-                return Err(Error::MethodRequiresBody(self.method().clone()));
-            }
-        }
+        // Method body validation is skipped in the Flow API
 
         Ok(RequestInfo {
             body_mode,

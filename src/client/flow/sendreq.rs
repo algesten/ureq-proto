@@ -115,7 +115,6 @@ impl<B> Flow<B, SendRequest> {
 
         let info = self.inner.request.analyze(
             self.inner.state.writer,
-            self.inner.state.skip_method_body_check,
             self.inner.state.allow_non_standard_methods,
         )?;
 

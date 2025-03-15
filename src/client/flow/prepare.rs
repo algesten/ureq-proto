@@ -97,7 +97,6 @@ impl<B> Flow<B, Prepare> {
         self.inner.should_send_body = true;
         self.inner.state = BodyState {
             writer: BodyWriter::new_chunked(),
-            skip_method_body_check: true,
             ..Default::default()
         };
     }
