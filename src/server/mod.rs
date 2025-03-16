@@ -184,24 +184,7 @@
 //!     // let new_reply = Reply::new().unwrap();
 //! }
 //! ```
-//!
-//! # In scope:
-//!
-//! * First class HTTP/1.1 protocol implementation
-//! * Indication of connection states (such as when a connection must be closed)
-//! * transfer-encoding: chunked
-//! * 100-continue handling
-//!
-//! # Out of scope:
-//!
-//! * Opening/closing sockets
-//! * TLS (https)
-//! * Request routing
-//! * Body data transformations (charset, compression etc)
-//!
-//! # The http crate
-//!
-//! Based on the [http crate](https://crates.io/crates/http) - a unified HTTP API for Rust.
+
 use std::fmt;
 use std::io::Write;
 use std::marker::PhantomData;
