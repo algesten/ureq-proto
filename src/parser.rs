@@ -110,7 +110,7 @@ pub fn try_parse_partial_response<const N: usize>(
             None => return Ok(None),
         };
         // unwrap: Looking at the impl of parse(), the status is 3 digits and cant fail.
-        StatusCode::from_u16(v).unwrap_or(StatusCode::default())
+        StatusCode::from_u16(v).unwrap_or_default()
     };
 
     let mut builder = Response::builder().version(version).status(status);
@@ -179,7 +179,7 @@ pub fn try_parse_request<const N: usize>(
         // unwrap: Looking at the impl of parse(), method cannot be None.
         let v = req.method.unwrap_or("GET");
         // unwrap: Looking at the impl of parse(), method will be something.
-        Method::from_bytes(v.as_bytes()).unwrap_or(Method::default())
+        Method::from_bytes(v.as_bytes()).unwrap_or_default()
     };
 
     let uri = req.path.unwrap_or("/");

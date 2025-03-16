@@ -200,15 +200,15 @@ fn try_write_prelude_part<Body>(
     w: &mut Writer,
 ) -> bool {
     match &mut state.phase {
-        RequestPhase::SendLine => {
+        RequestPhase::Line => {
             let success = do_write_send_line(request.prelude(), w);
             if success {
-                state.phase = RequestPhase::SendHeaders(0);
+                state.phase = RequestPhase::Headers(0);
             }
             success
         }
 
-        RequestPhase::SendHeaders(index) => {
+        RequestPhase::Headers(index) => {
             let header_count = request.headers_len();
             let all = request.headers();
             let skipped = all.skip(*index);
@@ -216,7 +216,7 @@ fn try_write_prelude_part<Body>(
             do_write_headers(skipped, index, header_count - 1, w);
 
             if *index == header_count {
-                state.phase = RequestPhase::SendBody;
+                state.phase = RequestPhase::Body;
             }
             false
         }

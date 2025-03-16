@@ -366,24 +366,24 @@ impl BodyState {
 /// - `SendBody`: Sending the request body
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RequestPhase {
-    SendLine,
-    SendHeaders(usize),
-    SendBody,
+    Line,
+    Headers(usize),
+    Body,
 }
 
 impl Default for RequestPhase {
     fn default() -> Self {
-        Self::SendLine
+        Self::Line
     }
 }
 
 impl RequestPhase {
     fn is_prelude(&self) -> bool {
-        matches!(self, RequestPhase::SendLine | RequestPhase::SendHeaders(_))
+        matches!(self, RequestPhase::Line | RequestPhase::Headers(_))
     }
 
     fn is_body(&self) -> bool {
-        matches!(self, RequestPhase::SendBody)
+        matches!(self, RequestPhase::Body)
     }
 }
 
@@ -594,9 +594,9 @@ impl<B, State: Named> fmt::Debug for Call<B, State> {
 impl fmt::Debug for RequestPhase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::SendLine => write!(f, "SendLine"),
-            Self::SendHeaders(_) => write!(f, "SendHeaders"),
-            Self::SendBody => write!(f, "SendBody"),
+            Self::Line => write!(f, "SendLine"),
+            Self::Headers(_) => write!(f, "SendHeaders"),
+            Self::Body => write!(f, "SendBody"),
         }
     }
 }
