@@ -1,7 +1,7 @@
 use http::{Request, Response, StatusCode, Version};
 
 use crate::client::test::scenario::write_response;
-use crate::client::CloseReason;
+use crate::CloseReason;
 
 use super::scenario::Scenario;
 
@@ -69,7 +69,10 @@ fn close_due_to_http10() {
 
     let call = scenario.to_cleanup();
     let inner = call.inner();
-    assert_eq!(*inner.close_reason.first().unwrap(), CloseReason::Http10);
+    assert_eq!(
+        *inner.close_reason.first().unwrap(),
+        CloseReason::CloseDelimitedBody
+    );
 
     assert!(call.must_close_connection());
 }

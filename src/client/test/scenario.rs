@@ -24,7 +24,7 @@ impl Scenario {
 }
 
 impl Scenario {
-    pub fn to_prepare(&self) -> Call<(), Prepare> {
+    pub fn to_prepare(&self) -> Call<Prepare> {
         // The unwraps here are ok because the user is not supposed to
         // construct tests that test the Scenario builder itself.
         let mut call = Call::new(self.request.clone()).unwrap();
@@ -36,13 +36,13 @@ impl Scenario {
         call
     }
 
-    pub fn to_send_request(&self) -> Call<(), SendRequest> {
+    pub fn to_send_request(&self) -> Call<SendRequest> {
         let call = self.to_prepare();
 
         call.proceed()
     }
 
-    pub fn to_send_body(&self) -> Call<(), SendBody> {
+    pub fn to_send_body(&self) -> Call<SendBody> {
         let mut call = self.to_send_request();
 
         // Write the prelude and discard
@@ -54,7 +54,7 @@ impl Scenario {
         }
     }
 
-    pub fn to_await_100(&self) -> Call<(), Await100> {
+    pub fn to_await_100(&self) -> Call<Await100> {
         let mut call = self.to_send_request();
 
         // Write the prelude and discard
@@ -66,7 +66,7 @@ impl Scenario {
         }
     }
 
-    pub fn to_recv_response(&self) -> Call<(), RecvResponse> {
+    pub fn to_recv_response(&self) -> Call<RecvResponse> {
         let mut call = self.to_send_request();
 
         // Write the prelude and discard
@@ -111,7 +111,7 @@ impl Scenario {
         }
     }
 
-    pub fn to_recv_body(&self) -> Call<(), RecvBody> {
+    pub fn to_recv_body(&self) -> Call<RecvBody> {
         let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);
@@ -127,7 +127,7 @@ impl Scenario {
         }
     }
 
-    pub fn to_redirect(&self) -> Call<(), Redirect> {
+    pub fn to_redirect(&self) -> Call<Redirect> {
         let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);
@@ -150,7 +150,7 @@ impl Scenario {
         }
     }
 
-    pub fn to_cleanup(&self) -> Call<(), Cleanup> {
+    pub fn to_cleanup(&self) -> Call<Cleanup> {
         let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);

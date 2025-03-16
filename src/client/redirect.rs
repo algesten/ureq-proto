@@ -7,7 +7,7 @@ use crate::Error;
 use super::state::{Cleanup, Prepare, Redirect};
 use super::{Call, RedirectAuthHeaders};
 
-impl<B> Call<B, Redirect> {
+impl Call<Redirect> {
     /// Construct a new `Call` by following the redirect.
     ///
     /// There are some rules when following a redirect.
@@ -22,7 +22,7 @@ impl<B> Call<B, Redirect> {
     pub fn as_new_call(
         &mut self,
         redirect_auth_headers: RedirectAuthHeaders,
-    ) -> Result<Option<Call<B, Prepare>>, Error> {
+    ) -> Result<Option<Call<Prepare>>, Error> {
         let header = match &self.inner.location {
             Some(v) => v,
             None => return Err(Error::NoLocationHeader),
@@ -113,7 +113,7 @@ impl<B> Call<B, Redirect> {
     }
 
     /// Proceed to the cleanup state.
-    pub fn proceed(self) -> Call<B, Cleanup> {
+    pub fn proceed(self) -> Call<Cleanup> {
         Call::wrap(self.inner)
     }
 }

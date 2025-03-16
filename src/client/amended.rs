@@ -33,29 +33,26 @@ use crate::Error;
 /// 9.  Changing the `Method` when following redirects.
 /// 10. Changing the `Uri` when following redirect.
 ///
-pub(crate) struct AmendedRequest<Body> {
-    request: Request<Option<Body>>,
+pub(crate) struct AmendedRequest {
+    request: Request<()>,
     uri: Option<Uri>,
     headers: Vec<(HeaderName, HeaderValue)>,
     unset: Vec<HeaderName>,
 }
 
-impl<Body> AmendedRequest<Body> {
-    pub fn new(request: Request<Body>) -> Self {
-        let (parts, body) = request.into_parts();
-
+impl AmendedRequest {
+    pub fn new(request: Request<()>) -> Self {
         AmendedRequest {
-            request: Request::from_parts(parts, Some(body)),
+            request,
             uri: None,
             headers: vec![],
             unset: vec![],
         }
     }
 
-    pub fn take_request(&mut self) -> Request<Body> {
-        let request = mem::replace(&mut self.request, Request::new(None));
-        let (parts, body) = request.into_parts();
-        Request::from_parts(parts, body.unwrap())
+    pub fn take_request(&mut self) -> Request<()> {
+        let empty = http::Request::new(());
+        mem::replace(&mut self.request, empty)
     }
 
     pub fn set_uri(&mut self, uri: Uri) {
@@ -325,7 +322,7 @@ pub(crate) struct RequestInfo {
     pub req_body_header: bool,
 }
 
-impl<B> fmt::Debug for AmendedRequest<B> {
+impl fmt::Debug for AmendedRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AmendedRequest")
             .field("method", &self.request.method())

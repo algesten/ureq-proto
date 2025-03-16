@@ -5,7 +5,7 @@ use crate::Error;
 use super::state::{RecvResponse, SendBody};
 use super::Call;
 
-impl<B> Call<B, SendBody> {
+impl Call<SendBody> {
     /// Write request body from `input` to `output`.
     ///
     /// This is called repeatedly until the entire body has been sent. The output buffer is filled
@@ -94,7 +94,7 @@ impl<B> Call<B, SendBody> {
     ///
     /// Returns `None` if it's not possible to proceed. It's guaranteed that if `can_proceed()` returns
     /// `true`, this will result in `Some`.
-    pub fn proceed(self) -> Option<Call<B, RecvResponse>> {
+    pub fn proceed(self) -> Option<Call<RecvResponse>> {
         if !self.can_proceed() {
             return None;
         }
