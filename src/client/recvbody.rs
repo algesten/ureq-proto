@@ -4,7 +4,7 @@ use crate::{BodyMode, Error};
 use super::state::RecvBody;
 use super::{Call, RecvBodyResult};
 
-impl<B> Call<B, RecvBody> {
+impl Call<RecvBody> {
     /// Read the response body from `input` to `output`.
     ///
     /// Depending on response headers, we can be in `transfer-encoding: chunked` or not. If we are,
@@ -70,7 +70,7 @@ impl<B> Call<B, RecvBody> {
     ///
     /// Returns `None` if we are not fully received the body. It is guaranteed that if `can_proceed()`
     /// returns `true`, this will return `Some`.
-    pub fn proceed(self) -> Option<RecvBodyResult<B>> {
+    pub fn proceed(self) -> Option<RecvBodyResult> {
         if !self.can_proceed() {
             return None;
         }

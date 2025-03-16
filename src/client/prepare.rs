@@ -8,12 +8,12 @@ use crate::{ArrayVec, Error};
 use super::state::{Prepare, SendRequest};
 use super::{BodyState, Call, CloseReason, Inner};
 
-impl<B> Call<B, Prepare> {
+impl Call<Prepare> {
     /// Create a new Call instance from an HTTP request.
     ///
     /// This initializes a new Call state machine in the Prepare state,
     /// setting up the necessary internal state based on the request properties.
-    pub fn new(request: Request<B>) -> Result<Self, Error> {
+    pub fn new(request: Request<()>) -> Result<Self, Error> {
         let mut close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
 
         if request.version() == Version::HTTP_10 {
@@ -105,7 +105,7 @@ impl<B> Call<B, Prepare> {
     }
 
     /// Continue to the next call state.
-    pub fn proceed(self) -> Call<B, SendRequest> {
+    pub fn proceed(self) -> Call<SendRequest> {
         Call::wrap(self.inner)
     }
 }

@@ -230,17 +230,17 @@ pub const MAX_REQUEST_HEADERS: usize = 128;
 ///
 /// See the [state graph][crate::server] in the server module documentation for a
 /// visual representation of the state transitions.
-pub struct Reply<State, B = ()> {
-    inner: Inner<B>,
+pub struct Reply<State> {
+    inner: Inner,
     _ph: PhantomData<State>,
 }
 
 // pub(crate) for tests to inspect state
 #[derive(Debug)]
-pub(crate) struct Inner<B> {
+pub(crate) struct Inner {
     pub phase: ResponsePhase,
     pub state: BodyState,
-    pub response: Option<AmendedResponse<B>>,
+    pub response: Option<AmendedResponse>,
     pub close_reason: ArrayVec<CloseReason, 4>,
     pub method: Option<Method>,
     pub expect_100: bool,
@@ -298,8 +298,8 @@ pub mod state {
 }
 use self::state::*;
 
-impl<S, B> Reply<S, B> {
-    fn wrap(inner: Inner<B>) -> Reply<S, B>
+impl<S> Reply<S> {
+    fn wrap(inner: Inner) -> Reply<S>
     where
         S: Named,
     {
@@ -314,7 +314,7 @@ impl<S, B> Reply<S, B> {
     }
 
     #[cfg(test)]
-    pub(crate) fn inner(&self) -> &Inner<B> {
+    pub(crate) fn inner(&self) -> &Inner {
         &self.inner
     }
 }
@@ -343,7 +343,7 @@ mod send100;
 ///
 /// This function is used when transitioning from a state that has received a request
 /// to a state that will send a response.
-fn append_request<B0, B>(inner: Inner<B0>, response: Response<B>) -> Inner<B> {
+fn append_request(inner: Inner, response: Response<()>) -> Inner {
     let default_body_mode = if response.status().body_allowed() {
         BodyWriter::new_chunked()
     } else {
@@ -397,7 +397,7 @@ mod sendbody;
 
 // //////////////////////////////////////////////////////////////////////////////////////////// CLEANUP
 
-impl<B> Reply<Cleanup, B> {
+impl Reply<Cleanup> {
     /// Tell if we must close the connection.
     pub fn must_close_connection(&self) -> bool {
         self.close_reason().is_some()
@@ -411,7 +411,7 @@ impl<B> Reply<Cleanup, B> {
 
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<State: Named, B> fmt::Debug for Reply<State, B> {
+impl<State: Named> fmt::Debug for Reply<State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Reply<{}>", State::name())
     }

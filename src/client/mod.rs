@@ -299,13 +299,12 @@ use self::state::*;
 /// states during the lifecycle of an HTTP request/response.
 ///
 /// The type parameters are:
-/// - `B`: The type of the request body
 /// - `State`: The current state of the state machine (e.g., `Prepare`, `SendRequest`, etc.)
 ///
 /// See the [state graph][crate::client] in the client module documentation for a
 /// visual representation of the state transitions.
-pub struct Call<B, State> {
-    inner: Inner<B>,
+pub struct Call<State> {
+    inner: Inner,
     _ph: PhantomData<State>,
 }
 
@@ -315,8 +314,8 @@ pub struct Call<B, State> {
 /// state type parameter. It's exposed as pub(crate) to allow tests to inspect
 /// the state.
 #[derive(Debug)]
-pub(crate) struct Inner<B> {
-    pub request: AmendedRequest<B>,
+pub(crate) struct Inner {
+    pub request: AmendedRequest,
     pub analyzed: bool,
     pub state: BodyState,
     pub close_reason: ArrayVec<CloseReason, 4>,
@@ -326,7 +325,7 @@ pub(crate) struct Inner<B> {
     pub location: Option<HeaderValue>,
 }
 
-impl<B> Inner<B> {
+impl Inner {
     fn is_redirect(&self) -> bool {
         match self.status {
             // 304 is a redirect code, but it has no location header and
@@ -388,8 +387,8 @@ impl RequestPhase {
     }
 }
 
-impl<B, S> Call<B, S> {
-    fn wrap(inner: Inner<B>) -> Call<B, S>
+impl<S> Call<S> {
+    fn wrap(inner: Inner) -> Call<S>
     where
         S: Named,
     {
@@ -404,7 +403,7 @@ impl<B, S> Call<B, S> {
     }
 
     #[cfg(test)]
-    pub(crate) fn inner(&self) -> &Inner<B> {
+    pub(crate) fn inner(&self) -> &Inner {
         &self.inner
     }
 }
@@ -426,15 +425,15 @@ pub(crate) use sendreq::do_write_headers;
 /// - `RecvResponse`: If the request has no body (e.g., GET, HEAD)
 ///
 /// See the [state graph][crate::client] for a visual representation.
-pub enum SendRequestResult<B> {
+pub enum SendRequestResult {
     /// Expect-100/Continue mechanic.
-    Await100(Call<B, Await100>),
+    Await100(Call<Await100>),
 
     /// Send the request body.
-    SendBody(Call<B, SendBody>),
+    SendBody(Call<SendBody>),
 
     /// Receive the response.
-    RecvResponse(Call<B, RecvResponse>),
+    RecvResponse(Call<RecvResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// AWAIT 100
@@ -448,12 +447,12 @@ mod await100;
 /// - `RecvResponse`: If the server sent a different response
 ///
 /// See the [state graph][crate::client] for a visual representation.
-pub enum Await100Result<B> {
+pub enum Await100Result {
     /// Send the request body.
-    SendBody(Call<B, SendBody>),
+    SendBody(Call<SendBody>),
 
     /// Receive server response.
-    RecvResponse(Call<B, RecvResponse>),
+    RecvResponse(Call<RecvResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND BODY
@@ -472,15 +471,15 @@ mod recvresp;
 /// - `Cleanup`: If the response has no body and is not a redirect
 ///
 /// See the [state graph][crate::client] for a visual representation.
-pub enum RecvResponseResult<B> {
+pub enum RecvResponseResult {
     /// Receive a response body.
-    RecvBody(Call<B, RecvBody>),
+    RecvBody(Call<RecvBody>),
 
     /// Follow a redirect.
-    Redirect(Call<B, Redirect>),
+    Redirect(Call<Redirect>),
 
     /// Run cleanup.
-    Cleanup(Call<B, Cleanup>),
+    Cleanup(Call<Cleanup>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
@@ -494,12 +493,12 @@ mod recvbody;
 /// - `Cleanup`: If the response is not a redirect
 ///
 /// See the [state graph][crate::client] for a visual representation.
-pub enum RecvBodyResult<B> {
+pub enum RecvBodyResult {
     /// Follow a redirect
-    Redirect(Call<B, Redirect>),
+    Redirect(Call<Redirect>),
 
     /// Go to cleanup
-    Cleanup(Call<B, Cleanup>),
+    Cleanup(Call<Cleanup>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// REDIRECT
@@ -528,7 +527,7 @@ pub enum RedirectAuthHeaders {
 
 // //////////////////////////////////////////////////////////////////////////////////////////// CLEANUP
 
-impl<B> Call<B, Cleanup> {
+impl Call<Cleanup> {
     /// Tell if we must close the connection.
     pub fn must_close_connection(&self) -> bool {
         self.close_reason().is_some()
@@ -542,7 +541,7 @@ impl<B> Call<B, Cleanup> {
 
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<B, State: Named> fmt::Debug for Call<B, State> {
+impl<State: Named> fmt::Debug for Call<State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Call<{}>", State::name())
     }
@@ -1252,8 +1251,8 @@ mod tests {
         }
 
         ensure!(http::Request<()>, 300); // 224
-        ensure!(AmendedRequest<()>, 400); // 368
-        ensure!(Inner<()>, 600); // 512
-        ensure!(Call<(), SendRequest>, 600); // 512
+        ensure!(AmendedRequest, 400); // 368
+        ensure!(Inner, 600); // 512
+        ensure!(Call<SendRequest>, 600); // 512
     }
 }

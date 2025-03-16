@@ -5,7 +5,7 @@ use crate::Error;
 use super::state::{SendBody, SendResponse};
 use super::{do_write_send_line, Reply, ResponsePhase};
 
-impl<B> Reply<SendResponse, B> {
+impl Reply<SendResponse> {
     /// Write the response headers to the output buffer.
     ///
     /// Writes the response status line and headers to the output buffer.
@@ -38,7 +38,7 @@ impl<B> Reply<SendResponse, B> {
     /// This is only possible when the response headers are fully written.
     ///
     /// Panics if the response headers have not been fully written.
-    pub fn proceed(self) -> Reply<SendBody, B> {
+    pub fn proceed(self) -> Reply<SendBody> {
         assert!(self.is_finished());
 
         let inner = self.inner;
@@ -46,8 +46,8 @@ impl<B> Reply<SendResponse, B> {
     }
 }
 
-fn try_write_prelude<B>(
-    response: &super::amended::AmendedResponse<B>,
+fn try_write_prelude(
+    response: &super::amended::AmendedResponse,
     phase: &mut ResponsePhase,
     w: &mut Writer,
 ) -> Result<(), Error> {
@@ -68,8 +68,8 @@ fn try_write_prelude<B>(
     }
 }
 
-fn try_write_prelude_part<Body>(
-    response: &super::amended::AmendedResponse<Body>,
+fn try_write_prelude_part(
+    response: &super::amended::AmendedResponse,
     phase: &mut ResponsePhase,
     w: &mut Writer,
 ) -> bool {

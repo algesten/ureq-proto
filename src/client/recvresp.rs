@@ -10,7 +10,7 @@ use super::state::RecvResponse;
 use super::MAX_RESPONSE_HEADERS;
 use super::{Call, CloseReason, RecvResponseResult};
 
-impl<B> Call<B, RecvResponse> {
+impl Call<RecvResponse> {
     /// Try reading a response from the input.
     ///
     /// * `allow_partial_redirect` - if `true`, we can accept to find the `Location` header
@@ -159,7 +159,7 @@ impl<B> Call<B, RecvResponse> {
     ///
     /// This returns `None` if we have not finished receiving the response. It is guaranteed that if
     /// `can_proceed()` returns true, this will return `Some`.
-    pub fn proceed(mut self) -> Option<RecvResponseResult<B>> {
+    pub fn proceed(mut self) -> Option<RecvResponseResult> {
         if !self.can_proceed() {
             return None;
         }

@@ -6,13 +6,13 @@ use crate::body::BodyWriter;
 use crate::util::compare_lowercase_ascii;
 use crate::Error;
 
-pub(crate) struct AmendedResponse<Body> {
-    response: Response<Body>,
+pub(crate) struct AmendedResponse {
+    response: Response<()>,
     headers: Vec<(HeaderName, HeaderValue)>,
 }
 
-impl<Body> AmendedResponse<Body> {
-    pub fn new(response: Response<Body>) -> Self {
+impl AmendedResponse {
+    pub fn new(response: Response<()>) -> Self {
         AmendedResponse {
             response,
             headers: vec![],
@@ -113,7 +113,7 @@ pub(crate) struct ResponseInfo {
     pub res_body_header: bool,
 }
 
-impl<B> fmt::Debug for AmendedResponse<B> {
+impl fmt::Debug for AmendedResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AmendedResponse")
             .field("status", &self.response.status())

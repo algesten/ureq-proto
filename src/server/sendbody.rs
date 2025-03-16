@@ -5,7 +5,7 @@ use crate::Error;
 use super::state::{Cleanup, SendBody};
 use super::Reply;
 
-impl<B> Reply<SendBody, B> {
+impl Reply<SendBody> {
     /// Write response body from `input` to `output`.
     ///
     /// This is called repeatedly until the entire body has been sent. The output buffer is filled
@@ -102,7 +102,7 @@ impl<B> Reply<SendBody, B> {
     /// This is only possible when the response body is fully sent.
     ///
     /// Panics if the response body has not been fully sent.
-    pub fn proceed(self) -> Reply<Cleanup, B> {
+    pub fn proceed(self) -> Reply<Cleanup> {
         assert!(self.is_finished());
 
         Reply::wrap(self.inner)

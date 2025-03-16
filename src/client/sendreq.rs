@@ -13,7 +13,7 @@ use crate::Error;
 use super::state::SendRequest;
 use super::{BodyState, Call, RequestPhase, SendRequestResult};
 
-impl<B> Call<B, SendRequest> {
+impl Call<SendRequest> {
     /// Write the request to the buffer.
     ///
     /// Writes incrementally, it can be called repeatedly in situations where the output
@@ -88,7 +88,7 @@ impl<B> Call<B, SendRequest> {
     ///
     /// Returns `None` if the entire request has not been sent. It is guaranteed that if
     /// `can_proceed()` returns `true`, this will return `Some`.
-    pub fn proceed(mut self) -> Result<Option<SendRequestResult<B>>, Error> {
+    pub fn proceed(mut self) -> Result<Option<SendRequestResult>, Error> {
         if !self.can_proceed() {
             return Ok(None);
         }
@@ -172,8 +172,8 @@ fn maybe_with_port(host: &str, uri: &Uri) -> Result<HeaderValue, Error> {
     from_str(host)
 }
 
-fn try_write_prelude<B>(
-    request: &AmendedRequest<B>,
+fn try_write_prelude(
+    request: &AmendedRequest,
     state: &mut BodyState,
     w: &mut Writer,
 ) -> Result<(), Error> {
@@ -194,11 +194,7 @@ fn try_write_prelude<B>(
     }
 }
 
-fn try_write_prelude_part<Body>(
-    request: &AmendedRequest<Body>,
-    state: &mut BodyState,
-    w: &mut Writer,
-) -> bool {
+fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &mut Writer) -> bool {
     match &mut state.phase {
         RequestPhase::Line => {
             let success = do_write_send_line(request.prelude(), w);

@@ -69,7 +69,7 @@ impl Reply<RecvBody> {
     /// Returns the Reply in the ProvideResponse state.
     ///
     /// Panics if the request body has not been fully read.
-    pub fn proceed<B>(self) -> Result<Reply<ProvideResponse>, Error> {
+    pub fn proceed(self) -> Result<Reply<ProvideResponse>, Error> {
         assert!(self.is_ended());
 
         Ok(Reply::wrap(self.inner))
