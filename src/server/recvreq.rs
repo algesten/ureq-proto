@@ -132,10 +132,12 @@ impl Reply<RecvRequest> {
 
         let has_request_body = self.inner.state.reader.as_ref().unwrap().has_body();
 
-        if self.inner.expect_100 {
-            Some(RecvRequestResult::Send100(Reply::wrap(self.inner)))
-        } else if has_request_body {
-            Some(RecvRequestResult::RecvBody(Reply::wrap(self.inner)))
+        if has_request_body {
+            if self.inner.expect_100 {
+                Some(RecvRequestResult::Send100(Reply::wrap(self.inner)))
+            } else {
+                Some(RecvRequestResult::RecvBody(Reply::wrap(self.inner)))
+            }
         } else {
             Some(RecvRequestResult::ProvideResponse(Reply::wrap(self.inner)))
         }

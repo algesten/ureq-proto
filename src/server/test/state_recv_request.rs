@@ -152,3 +152,39 @@ fn proceed_to_provide_response_with_head() {
         _ => panic!("Expected ProvideResponse state"),
     }
 }
+
+#[test]
+fn proceed_to_provide_response_with_head_expect() {
+    // Create a new Reply directly
+    let mut reply = Reply::new().unwrap();
+
+    // HEAD request with Expect: 100-continue (should still go to ProvideResponse)
+    let input = b"HEAD /path HTTP/1.1\r\nhost: example.com\r\nexpect: 100-continue\r\n\r\n";
+    let (_, request) = reply.try_request(input).unwrap();
+    assert!(request.is_some());
+
+    // Should proceed to ProvideResponse since HEAD requests never have a body,
+    // regardless of Expect: 100-continue header
+    match reply.proceed().unwrap() {
+        RecvRequestResult::ProvideResponse(_) => {}
+        _ => panic!("Expected ProvideResponse state"),
+    }
+}
+
+#[test]
+fn proceed_to_send_100_with_get_chunked() {
+    // Create a new Reply directly
+    let mut reply = Reply::new().unwrap();
+
+    // GET request with both Transfer-Encoding: chunked and Expect: 100-continue
+    let input = b"GET /path HTTP/1.1\r\nhost: example.com\r\ntransfer-encoding: chunked\r\nexpect: 100-continue\r\n\r\n";
+    let (_, request) = reply.try_request(input).unwrap();
+    assert!(request.is_some());
+
+    // Should proceed to Send100 since request has both a body (chunked) and expect: 100-continue,
+    // even though it's a GET request
+    match reply.proceed().unwrap() {
+        RecvRequestResult::Send100(_) => {}
+        _ => panic!("Expected Send100 state"),
+    }
+}
