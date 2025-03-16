@@ -4,7 +4,6 @@ use std::io::Write;
 use http::{header, HeaderName, HeaderValue, Method};
 
 use crate::chunk::Dechunker;
-use crate::ext::MethodExt;
 use crate::util::{compare_lowercase_ascii, log_data, Writer};
 use crate::Error;
 
@@ -253,11 +252,14 @@ impl BodyReader {
         }
     }
 
+    #[cfg(feature = "server")]
     pub fn for_request<'a>(
         http10: bool,
         method: &Method,
         header_lookup: &'a dyn Fn(http::HeaderName) -> Option<&'a str>,
     ) -> Result<Self, Error> {
+        use crate::ext::MethodExt;
+
         let has_no_body = !method.need_request_body();
 
         if has_no_body {
@@ -278,6 +280,7 @@ impl BodyReader {
         Ok(ret)
     }
 
+    #[cfg(feature = "client")]
     pub fn for_response<'a>(
         http10: bool,
         method: &Method,

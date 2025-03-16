@@ -2,8 +2,6 @@ use std::fmt;
 use std::io::{self, Cursor};
 use std::ops::{Deref, DerefMut};
 
-use http::uri::Authority;
-
 pub(crate) fn find_crlf(b: &[u8]) -> Option<usize> {
     let cr = b.iter().position(|c| *c == b'\r')?;
     let maybe_lf = b.get(cr + 1)?;
@@ -195,30 +193,5 @@ impl<'a, T, const N: usize> IntoIterator for &'a ArrayVec<T, N> {
 
     fn into_iter(self) -> Self::IntoIter {
         self[..self.len].iter()
-    }
-}
-
-pub(crate) trait AuthorityExt {
-    fn userinfo(&self) -> Option<&str>;
-    fn username(&self) -> Option<&str>;
-    fn password(&self) -> Option<&str>;
-}
-
-// NB: Treating &str with direct indexes is OK, since Uri parsed the Authority,
-// and ensured it's all ASCII (or %-encoded).
-impl AuthorityExt for Authority {
-    fn userinfo(&self) -> Option<&str> {
-        let s = self.as_str();
-        s.rfind('@').map(|i| &s[..i])
-    }
-
-    fn username(&self) -> Option<&str> {
-        self.userinfo()
-            .map(|a| a.rfind(':').map(|i| &a[..i]).unwrap_or(a))
-    }
-
-    fn password(&self) -> Option<&str> {
-        self.userinfo()
-            .and_then(|a| a.rfind(':').map(|i| &a[i + 1..]))
     }
 }

@@ -1,8 +1,6 @@
-use http::uri::Scheme;
-use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
+use http::{header, HeaderName, HeaderValue, Method, StatusCode};
 
-use crate::Error;
-
+#[cfg(feature = "server")]
 pub(crate) trait StatusCodeExt {
     /// Check if the status code requires a body according to HTTP spec.
     ///
@@ -15,6 +13,7 @@ pub(crate) trait StatusCodeExt {
     fn body_allowed(&self) -> bool;
 }
 
+#[cfg(feature = "server")]
 impl StatusCodeExt for StatusCode {
     fn body_allowed(&self) -> bool {
         !self.is_informational()
@@ -24,17 +23,22 @@ impl StatusCodeExt for StatusCode {
 }
 
 pub(crate) trait MethodExt {
+    #[cfg(feature = "client")]
     fn is_http10(&self) -> bool;
+    #[cfg(feature = "client")]
     fn is_http11(&self) -> bool;
     fn need_request_body(&self) -> bool;
-    fn verify_version(&self, version: Version) -> Result<(), Error>;
+    #[cfg(feature = "client")]
+    fn verify_version(&self, version: http::Version) -> Result<(), crate::Error>;
 }
 
 impl MethodExt for Method {
+    #[cfg(feature = "client")]
     fn is_http10(&self) -> bool {
         self == Method::GET || self == Method::HEAD || self == Method::POST
     }
 
+    #[cfg(feature = "client")]
     fn is_http11(&self) -> bool {
         self == Method::PUT
             || self == Method::DELETE
@@ -48,7 +52,10 @@ impl MethodExt for Method {
         self == Method::POST || self == Method::PUT || self == Method::PATCH
     }
 
-    fn verify_version(&self, v: Version) -> Result<(), Error> {
+    #[cfg(feature = "client")]
+    fn verify_version(&self, v: http::Version) -> Result<(), crate::Error> {
+        use crate::Error;
+        use http::Version;
         if v != Version::HTTP_10 && v != Version::HTTP_11 {
             return Err(Error::UnsupportedVersion);
         }
@@ -78,23 +85,28 @@ impl<'a, I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>> HeaderIterExt fo
     }
 }
 
+#[cfg(feature = "client")]
 pub(crate) trait StatusExt {
     /// Detect 307/308 redirect
     fn is_redirect_retaining_status(&self) -> bool;
 }
 
+#[cfg(feature = "client")]
 impl StatusExt for StatusCode {
     fn is_redirect_retaining_status(&self) -> bool {
         *self == StatusCode::TEMPORARY_REDIRECT || *self == StatusCode::PERMANENT_REDIRECT
     }
 }
 
+#[cfg(feature = "client")]
 pub trait SchemeExt {
     fn default_port(&self) -> Option<u16>;
 }
 
-impl SchemeExt for Scheme {
+#[cfg(feature = "client")]
+impl SchemeExt for http::uri::Scheme {
     fn default_port(&self) -> Option<u16> {
+        use http::uri::Scheme;
         if *self == Scheme::HTTPS {
             Some(443)
         } else if *self == Scheme::HTTP {
@@ -103,5 +115,32 @@ impl SchemeExt for Scheme {
             debug!("Unknown scheme: {}", self);
             None
         }
+    }
+}
+
+#[cfg(feature = "client")]
+pub(crate) trait AuthorityExt {
+    fn userinfo(&self) -> Option<&str>;
+    fn username(&self) -> Option<&str>;
+    fn password(&self) -> Option<&str>;
+}
+
+// NB: Treating &str with direct indexes is OK, since Uri parsed the Authority,
+// and ensured it's all ASCII (or %-encoded).
+#[cfg(feature = "client")]
+impl AuthorityExt for http::uri::Authority {
+    fn userinfo(&self) -> Option<&str> {
+        let s = self.as_str();
+        s.rfind('@').map(|i| &s[..i])
+    }
+
+    fn username(&self) -> Option<&str> {
+        self.userinfo()
+            .map(|a| a.rfind(':').map(|i| &a[..i]).unwrap_or(a))
+    }
+
+    fn password(&self) -> Option<&str> {
+        self.userinfo()
+            .and_then(|a| a.rfind(':').map(|i| &a[i + 1..]))
     }
 }

@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{BodyMode, Error};
 
 use super::state::{ProvideResponse, RecvBody};
 use super::Reply;
@@ -52,6 +52,11 @@ impl Reply<RecvBody> {
     pub fn is_on_chunk_boundary(&self) -> bool {
         let rbm = self.inner.state.reader.as_ref().unwrap();
         rbm.is_on_chunk_boundary()
+    }
+
+    /// Tell which kind of mode the response body is.
+    pub fn body_mode(&self) -> BodyMode {
+        self.inner.state.reader.as_ref().unwrap().body_mode()
     }
 
     /// Tell if the request body is over

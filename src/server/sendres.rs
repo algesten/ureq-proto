@@ -1,4 +1,7 @@
-use crate::client::do_write_headers;
+use std::io::Write;
+
+use http::{HeaderName, HeaderValue};
+
 use crate::util::Writer;
 use crate::Error;
 
@@ -97,5 +100,28 @@ fn try_write_prelude_part(
 
         // We're past the header.
         _ => false,
+    }
+}
+
+fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
+where
+    I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
+{
+    for h in headers {
+        let success = w.try_write(|w| {
+            write!(w, "{}: ", h.0)?;
+            w.write_all(h.1.as_bytes())?;
+            write!(w, "\r\n")?;
+            if *index == last_index {
+                write!(w, "\r\n")?;
+            }
+            Ok(())
+        });
+
+        if success {
+            *index += 1;
+        } else {
+            break;
+        }
     }
 }

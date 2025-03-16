@@ -75,7 +75,8 @@ impl fmt::Display for Error {
 }
 
 #[cfg(test)]
-mod tests {
+#[cfg(feature = "client")]
+mod tests_client {
     use super::*;
     use crate::client::{
         state::{RecvResponse, Redirect, SendBody, SendRequest},

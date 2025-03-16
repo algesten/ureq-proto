@@ -12,6 +12,9 @@ repository = "https://github.com/algesten/ureq-proto"
 rust-version = "1.71.1"
 
 [features]
+default = ["client", "server"]
+client = []
+server = []
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["std"] }

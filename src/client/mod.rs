@@ -396,7 +396,6 @@ mod prepare;
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND REQUEST
 
 mod sendreq;
-pub(crate) use sendreq::do_write_headers;
 
 /// Possible state transitions after sending a request.
 ///

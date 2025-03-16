@@ -43,7 +43,9 @@ mod util;
 mod body;
 pub use body::BodyMode;
 
+#[cfg(feature = "client")]
 pub mod client;
+#[cfg(feature = "server")]
 pub mod server;
 
 mod close_reason;

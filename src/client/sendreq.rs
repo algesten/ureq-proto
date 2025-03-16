@@ -6,8 +6,8 @@ use http::uri::Scheme;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Uri, Version};
 
 use crate::client::amended::AmendedRequest;
-use crate::ext::SchemeExt;
-use crate::util::{AuthorityExt, Writer};
+use crate::ext::{AuthorityExt, SchemeExt};
+use crate::util::Writer;
 use crate::Error;
 
 use super::state::SendRequest;
@@ -226,12 +226,8 @@ fn do_write_send_line(line: (&Method, &str, Version), w: &mut Writer) -> bool {
     w.try_write(|w| write!(w, "{} {} {:?}\r\n", line.0, line.1, line.2))
 }
 
-pub(crate) fn do_write_headers<'a, I>(
-    headers: I,
-    index: &mut usize,
-    last_index: usize,
-    w: &mut Writer,
-) where
+fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
+where
     I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
 {
     for h in headers {
