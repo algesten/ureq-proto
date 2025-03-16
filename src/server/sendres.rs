@@ -1,4 +1,4 @@
 use super::state::SendResponse;
-use super::Flow;
+use super::Reply;
 
-impl Flow<SendResponse> {}
+impl Reply<SendResponse> {}

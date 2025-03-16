@@ -50,8 +50,8 @@ mod amended;
 /// Max number of headers to parse from an HTTP requst
 pub const MAX_REQUEST_HEADERS: usize = 128;
 
-/// A flow of calls, in some state following the flow [state graph][crate::server]
-pub struct Flow<State, B = ()> {
+/// [state graph][crate::server]
+pub struct Reply<State, B = ()> {
     inner: Inner<B>,
     _ph: PhantomData<State>,
 }
@@ -97,7 +97,7 @@ pub mod state {
         fn name() -> &'static str;
     }
 
-    macro_rules! flow_state {
+    macro_rules! reply_state {
         ($n:tt) => {
             #[doc(hidden)]
             pub struct $n(());
@@ -109,21 +109,21 @@ pub mod state {
         };
     }
 
-    flow_state!(RecvRequest);
-    flow_state!(Send100);
-    flow_state!(RecvBody);
-    flow_state!(SendResponse);
-    flow_state!(SendBody);
-    flow_state!(Cleanup);
+    reply_state!(RecvRequest);
+    reply_state!(Send100);
+    reply_state!(RecvBody);
+    reply_state!(SendResponse);
+    reply_state!(SendBody);
+    reply_state!(Cleanup);
 }
 use self::state::*;
 
-impl<S, B> Flow<S, B> {
-    fn wrap(inner: Inner<B>) -> Flow<S, B>
+impl<S, B> Reply<S, B> {
+    fn wrap(inner: Inner<B>) -> Reply<S, B>
     where
         S: Named,
     {
-        let wrapped = Flow {
+        let wrapped = Reply {
             inner,
             _ph: PhantomData,
         };
@@ -148,11 +148,11 @@ mod recvreq;
 /// See [state graph][crate::server]
 pub enum RecvRequestResult {
     /// Client is expecting a 100-continue response.
-    Send100(Flow<Send100>),
+    Send100(Reply<Send100>),
     /// Receive a request body.
-    RecvBody(Flow<RecvBody>),
+    RecvBody(Reply<RecvBody>),
     /// Client did not send a body.
-    SendResponse(Flow<SendResponse>),
+    SendResponse(Reply<SendResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND 100
@@ -205,7 +205,7 @@ mod sendbody;
 
 // //////////////////////////////////////////////////////////////////////////////////////////// CLEANUP
 
-impl<B> Flow<B, Cleanup> {
+impl<B> Reply<B, Cleanup> {
     /// Tell if we must close the connection.
     pub fn must_close_connection(&self) -> bool {
         self.close_reason().is_some()
@@ -219,9 +219,9 @@ impl<B> Flow<B, Cleanup> {
 
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<State: Named, B> fmt::Debug for Flow<State, B> {
+impl<State: Named, B> fmt::Debug for Reply<State, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Flow<{}>", State::name())
+        write!(f, "Reply<{}>", State::name())
     }
 }
 

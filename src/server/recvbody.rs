@@ -1,4 +1,4 @@
 use super::state::RecvBody;
-use super::Flow;
+use super::Reply;
 
-impl Flow<RecvBody> {}
+impl Reply<RecvBody> {}

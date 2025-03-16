@@ -7,11 +7,11 @@ use crate::util::log_data;
 use crate::{ArrayVec, CloseReason, Error};
 
 use super::state::RecvRequest;
-use super::{Flow, Inner, ResponsePhase};
+use super::{Inner, Reply, ResponsePhase};
 use super::{RecvRequestResult, MAX_REQUEST_HEADERS};
 
-impl Flow<RecvRequest> {
-    /// Create a new Flow.
+impl Reply<RecvRequest> {
+    /// Create a new Reply.
     pub fn new() -> Result<Self, Error> {
         let close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
 
@@ -25,7 +25,7 @@ impl Flow<RecvRequest> {
             expect_100: false,
         };
 
-        Ok(Flow::wrap(inner))
+        Ok(Reply::wrap(inner))
     }
 
     /// Try reading a request from the input.
@@ -102,11 +102,11 @@ impl Flow<RecvRequest> {
         let has_request_body = method.need_request_body();
 
         if self.inner.expect_100 {
-            Some(RecvRequestResult::Send100(Flow::wrap(self.inner)))
+            Some(RecvRequestResult::Send100(Reply::wrap(self.inner)))
         } else if has_request_body {
-            Some(RecvRequestResult::RecvBody(Flow::wrap(self.inner)))
+            Some(RecvRequestResult::RecvBody(Reply::wrap(self.inner)))
         } else {
-            Some(RecvRequestResult::SendResponse(Flow::wrap(self.inner)))
+            Some(RecvRequestResult::SendResponse(Reply::wrap(self.inner)))
         }
     }
 }
