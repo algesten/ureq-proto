@@ -67,13 +67,17 @@
 //! let mut reply = Reply::new().unwrap();
 //!
 //! // Receive a request from the client
-//! let input = b"GET /my-path HTTP/1.1\r\nhost: example.test\r\nexpect: 100-continue\r\n\r\n";
+//! let input = b"POST /my-path HTTP/1.1\r\n\
+//!     host: example.test\r\n\
+//!     transfer-encoding: chunked\r\n\
+//!     expect: 100-continue\r\n\
+//!     \r\n";
 //! let (input_used, request) = reply.try_request(input).unwrap();
 //!
-//! assert_eq!(input_used, 67);
+//! assert_eq!(input_used, 96);
 //! let request = request.unwrap();
 //! assert_eq!(request.uri().path(), "/my-path");
-//! assert_eq!(request.method(), "GET");
+//! assert_eq!(request.method(), "POST");
 //!
 //! // Check if we can proceed to the next state
 //! // In a real server, you would implement this method
@@ -105,12 +109,12 @@
 //! // Now we can receive the request body
 //! let mut reply = reply;
 //!
-//! // Receive the body in chunks
-//! let input = b"hello";
+//! // Receive the body in chunks (chunked encoding format)
+//! let input = b"5\r\nhello\r\n0\r\n\r\n";
 //! let mut body_buffer = vec![0_u8; 1024];
 //! let (input_used, output_used) = reply.read(input, &mut body_buffer).unwrap();
 //!
-//! assert_eq!(input_used, 5);
+//! assert_eq!(input_used, 15);
 //! assert_eq!(output_used, 5);
 //! assert_eq!(&body_buffer[..output_used], b"hello");
 //!
@@ -140,8 +144,8 @@
 //!
 //! assert_eq!(&output[..output_used], b"\
 //!     HTTP/1.1 200 OK\r\n\
-//!     content-type: text/plain\r\n\
 //!     transfer-encoding: chunked\r\n\
+//!     content-type: text/plain\r\n\
 //!     \r\n");
 //!
 //! // Check if the response headers are fully sent
