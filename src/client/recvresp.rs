@@ -70,9 +70,6 @@ impl<B> Call<B, RecvResponse> {
     /// headers. Before that this returns `None`. When the response is succesfully read,
     /// the return value `(usize, Response<()>)` contains how many bytes were consumed
     /// of the `input`.
-    ///
-    /// Once the response headers are succesfully read, use [`Call::into_body()`] to proceed
-    /// reading the response body.
     fn do_try_response(
         &mut self,
         input: &[u8],
