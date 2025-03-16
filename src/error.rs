@@ -73,7 +73,7 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::flow::{
+    use crate::client::{
         state::{RecvResponse, Redirect, SendBody, SendRequest},
         Flow, RecvResponseResult, RedirectAuthHeaders, SendRequestResult,
     };

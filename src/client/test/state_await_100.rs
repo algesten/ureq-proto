@@ -1,4 +1,4 @@
-use crate::client::flow::Await100Result;
+use crate::client::Await100Result;
 
 use super::scenario::Scenario;
 

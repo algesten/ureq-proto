@@ -1,4 +1,4 @@
-use crate::client::flow::SendRequestResult;
+use crate::client::SendRequestResult;
 
 use super::scenario::Scenario;
 use super::TestSliceExt;

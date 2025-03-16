@@ -6,8 +6,8 @@ use crate::parser::{try_parse_partial_response, try_parse_response};
 use crate::util::log_data;
 use crate::Error;
 
-use super::super::MAX_RESPONSE_HEADERS;
 use super::state::RecvResponse;
+use super::MAX_RESPONSE_HEADERS;
 use super::{CloseReason, Flow, RecvResponseResult};
 
 impl<B> Flow<B, RecvResponse> {

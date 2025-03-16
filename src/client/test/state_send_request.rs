@@ -1,4 +1,4 @@
-use crate::client::flow::SendRequestResult;
+use crate::client::SendRequestResult;
 use crate::Error;
 
 use super::scenario::Scenario;

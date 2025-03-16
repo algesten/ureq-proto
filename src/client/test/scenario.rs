@@ -3,11 +3,11 @@ use std::marker::PhantomData;
 
 use http::{Method, Request, Response, StatusCode};
 
-use crate::client::flow::state::{
+use crate::client::state::{
     Await100, Cleanup, Prepare, RecvBody, RecvResponse, Redirect, SendBody, SendRequest,
 };
-use crate::client::flow::{Await100Result, Flow, SendRequestResult};
-use crate::client::flow::{RecvBodyResult, RecvResponseResult};
+use crate::client::{Await100Result, Flow, SendRequestResult};
+use crate::client::{RecvBodyResult, RecvResponseResult};
 
 pub struct Scenario {
     request: Request<()>,

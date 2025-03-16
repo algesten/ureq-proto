@@ -1,7 +1,7 @@
 use http::{Method, Response, StatusCode};
 
-use crate::client::flow::RedirectAuthHeaders;
 use crate::client::test::TestSliceExt;
+use crate::client::RedirectAuthHeaders;
 use crate::Error;
 
 use super::scenario::Scenario;
