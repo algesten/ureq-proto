@@ -223,6 +223,7 @@ pub(crate) enum BodyReader {
     /// Chunked transfer encoding
     Chunked(Dechunker),
     /// Expect remote to close at end of body.
+    #[cfg(feature = "client")]
     CloseDelimited,
 }
 
@@ -248,10 +249,12 @@ impl BodyReader {
             // not the total length, but the the remaining.
             BodyReader::LengthDelimited(v) => BodyMode::LengthDelimited(*v),
             BodyReader::Chunked(_) => BodyMode::Chunked,
+            #[cfg(feature = "client")]
             BodyReader::CloseDelimited => BodyMode::CloseDelimited,
         }
     }
 
+    #[cfg(feature = "server")]
     pub fn has_body(&self) -> bool {
         match self {
             BodyReader::NoBody => false,
@@ -380,8 +383,9 @@ impl BodyReader {
         let part = match self {
             BodyReader::LengthDelimited(_) => self.read_limit(src, dst),
             BodyReader::Chunked(_) => self.read_chunked(src, dst, stop_on_chunk_boundary),
-            BodyReader::CloseDelimited => self.read_unlimit(src, dst),
             BodyReader::NoBody => return Ok((0, 0)),
+            #[cfg(feature = "client")]
+            BodyReader::CloseDelimited => self.read_unlimit(src, dst),
         }?;
 
         log_data(&src[..part.0]);
@@ -441,6 +445,7 @@ impl BodyReader {
         Ok((input_used, output_used))
     }
 
+    #[cfg(feature = "client")]
     fn read_unlimit(&mut self, src: &[u8], dst: &mut [u8]) -> Result<(usize, usize), Error> {
         let to_read = src.len().min(dst.len());
 
@@ -454,6 +459,7 @@ impl BodyReader {
             BodyReader::NoBody => true,
             BodyReader::LengthDelimited(v) => *v == 0,
             BodyReader::Chunked(v) => v.is_ended(),
+            #[cfg(feature = "client")]
             BodyReader::CloseDelimited => false,
         }
     }
@@ -463,6 +469,7 @@ impl BodyReader {
             BodyReader::NoBody => false,
             BodyReader::LengthDelimited(_) => false,
             BodyReader::Chunked(v) => v.is_on_chunk_boundary(),
+            #[cfg(feature = "client")]
             BodyReader::CloseDelimited => false,
         }
     }
@@ -474,6 +481,7 @@ impl fmt::Debug for BodyReader {
             Self::NoBody => write!(f, "NoBody"),
             Self::LengthDelimited(arg0) => f.debug_tuple("LengthDelimited").field(arg0).finish(),
             Self::Chunked(_) => write!(f, "Chunked"),
+            #[cfg(feature = "client")]
             Self::CloseDelimited => write!(f, "CloseDelimited"),
         }
     }
