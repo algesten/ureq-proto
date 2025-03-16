@@ -4,9 +4,6 @@
 /// to be closed after a request/response cycle is complete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloseReason {
-    /// HTTP/1.0 requires each request-response to end with a close.
-    Http10,
-
     /// Client sent `connection: close`.
     ClientConnectionClose,
 
@@ -15,13 +12,11 @@ pub enum CloseReason {
 
     /// When doing expect-100 the server sent _some other response_.
     ///
-    /// For expect-100, the only two options for a server response are:
+    /// For expect-100, the only options for a server response are:
     ///
     /// * 100 continue, in which case we continue to send the body.
     /// * do nothing, in which case we continue to send the body after a timeout.
-    ///
-    /// Sending _something else_, like 401, is incorrect and we must close
-    /// the connection.
+    /// * a 4xx or 5xx response indicating the server cannot receive the body.
     Not100Continue,
 
     /// Response body is close delimited.
@@ -34,10 +29,9 @@ pub enum CloseReason {
 impl CloseReason {
     pub(crate) fn explain(&self) -> &'static str {
         match self {
-            CloseReason::Http10 => "version is http1.0",
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
-            CloseReason::Not100Continue => "got non-100 response before sending body",
+            CloseReason::Not100Continue => "non-100 response before body",
             CloseReason::CloseDelimitedBody => "response body is close delimited",
         }
     }

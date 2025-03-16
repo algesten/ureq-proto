@@ -1,6 +1,6 @@
-use http::Response;
+use http::{header, Response};
 
-use crate::Error;
+use crate::{CloseReason, Error};
 
 use super::state::{ProvideResponse, SendResponse};
 use super::{append_request, Reply};
@@ -22,8 +22,15 @@ impl Reply<ProvideResponse> {
 
         // unwrap are correct due to state we should be in when we get here.
         let response = inner.response.as_mut().unwrap();
-        let writer = inner.state.writer.take().unwrap();
 
+        if response
+            .headers()
+            .any(|(h, v)| h == header::CONNECTION && v == "close")
+        {
+            inner.close_reason.push(CloseReason::ServerConnectionClose);
+        }
+
+        let writer = inner.state.writer.take().unwrap();
         let info = response.analyze(writer)?;
 
         if !info.res_body_header && info.body_mode.has_body() {

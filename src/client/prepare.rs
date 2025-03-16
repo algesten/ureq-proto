@@ -14,11 +14,11 @@ impl Call<Prepare> {
     /// This initializes a new Call state machine in the Prepare state,
     /// setting up the necessary internal state based on the request properties.
     pub fn new(request: Request<()>) -> Result<Self, Error> {
-        let mut close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
+        let mut close_reason = ArrayVec::from_fn(|_| CloseReason::ClientConnectionClose);
 
         if request.version() == Version::HTTP_10 {
             // request.analyze() in CallHolder::new() ensures the only versions are HTTP 1.0 and 1.1
-            close_reason.push(CloseReason::Http10)
+            close_reason.push(CloseReason::CloseDelimitedBody)
         }
 
         if request.headers().iter().has(header::CONNECTION, "close") {

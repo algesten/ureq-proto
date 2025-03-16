@@ -69,7 +69,10 @@ fn close_due_to_http10() {
 
     let call = scenario.to_cleanup();
     let inner = call.inner();
-    assert_eq!(*inner.close_reason.first().unwrap(), CloseReason::Http10);
+    assert_eq!(
+        *inner.close_reason.first().unwrap(),
+        CloseReason::CloseDelimitedBody
+    );
 
     assert!(call.must_close_connection());
 }

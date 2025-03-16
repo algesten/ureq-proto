@@ -1,4 +1,4 @@
-use http::{header, Request, Version};
+use http::{Request, Version};
 
 use crate::body::BodyReader;
 use crate::ext::{HeaderIterExt, MethodExt};
@@ -18,7 +18,7 @@ impl Reply<RecvRequest> {
     ///
     /// Returns an error if the Reply cannot be created.
     pub fn new() -> Result<Self, Error> {
-        let close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
+        let close_reason = ArrayVec::from_fn(|_| CloseReason::ClientConnectionClose);
 
         let inner = Inner {
             phase: ResponsePhase::Status,
@@ -54,10 +54,10 @@ impl Reply<RecvRequest> {
         self.inner.method = Some(request.method().clone());
         self.inner.expect_100 = request.headers().iter().has_expect_100();
 
-        if request.headers().iter().has(header::CONNECTION, "close") {
+        if request.version() == Version::HTTP_10 {
             self.inner
                 .close_reason
-                .push(CloseReason::ClientConnectionClose);
+                .push(CloseReason::CloseDelimitedBody);
         }
 
         Ok((input_used, Some(request)))
