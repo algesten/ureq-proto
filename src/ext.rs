@@ -3,6 +3,26 @@ use http::{header, HeaderName, HeaderValue, Method, StatusCode, Version};
 
 use crate::Error;
 
+pub(crate) trait StatusCodeExt {
+    /// Check if the status code requires a body according to HTTP spec.
+    ///
+    /// According to the HTTP specification, the following status codes must not include a message body:
+    /// - 1xx (Informational): 100, 101, etc.
+    /// - 204 (No Content)
+    /// - 304 (Not Modified)
+    ///
+    /// All other status codes can include a message body.
+    fn body_allowed(&self) -> bool;
+}
+
+impl StatusCodeExt for StatusCode {
+    fn body_allowed(&self) -> bool {
+        !self.is_informational()
+            && *self != StatusCode::NO_CONTENT
+            && *self != StatusCode::NOT_MODIFIED
+    }
+}
+
 pub(crate) trait MethodExt {
     fn is_http10(&self) -> bool;
     fn is_http11(&self) -> bool;

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use http::{Method, Version};
+use http::{Method, StatusCode, Version};
 
 /// Error type for ureq-proto
 #[derive(Debug, PartialEq, Eq)]
@@ -27,6 +27,7 @@ pub enum Error {
     BadLocationHeader(String),
     HeadersWith100,
     BodyIsChunked,
+    BadReject100Status(StatusCode),
 }
 
 impl From<httparse::Error> for Error {
@@ -66,6 +67,9 @@ impl fmt::Display for Error {
             Error::BadLocationHeader(v) => write!(f, "location header is malformed: {}", v),
             Error::HeadersWith100 => write!(f, "received headers with 100-continue response"),
             Error::BodyIsChunked => write!(f, "body is chunked"),
+            Error::BadReject100Status(v) => {
+                write!(f, "expect-100 must be rejected with 4xx or 5xx: {}", v)
+            }
         }
     }
 }
@@ -82,7 +86,7 @@ mod tests {
     // Helper methods to reduce test verbosity
 
     /// Creates a Call object from a request and proceeds to the initial state
-    fn setup_call(req: Request<()>) -> (Call<(), SendRequest>, Vec<u8>) {
+    fn setup_call(req: Request<()>) -> (Call<SendRequest>, Vec<u8>) {
         let call = Call::new(req).unwrap();
         let call = call.proceed();
         let output = vec![0; 1024];
@@ -90,7 +94,7 @@ mod tests {
     }
 
     /// Creates a Call object and proceeds to the RecvResponse state
-    fn setup_recv_response_call() -> (Call<(), RecvResponse>, Vec<u8>) {
+    fn setup_recv_response_call() -> (Call<RecvResponse>, Vec<u8>) {
         let req = Request::get("http://example.com").body(()).unwrap();
         let (mut call, mut output) = setup_call(req);
 
@@ -107,7 +111,7 @@ mod tests {
     }
 
     /// Creates a Call object and proceeds to the SendBody state
-    fn setup_send_body_call(req: Request<()>) -> (Call<(), SendBody>, Vec<u8>, usize) {
+    fn setup_send_body_call(req: Request<()>) -> (Call<SendBody>, Vec<u8>, usize) {
         let (mut call, mut output) = setup_call(req);
 
         // Write the request headers
@@ -123,7 +127,7 @@ mod tests {
     }
 
     /// Creates a Call object and proceeds to the Redirect state with the given response
-    fn setup_redirect_call(response: &[u8]) -> Result<(Call<(), Redirect>, Vec<u8>), Error> {
+    fn setup_redirect_call(response: &[u8]) -> Result<(Call<Redirect>, Vec<u8>), Error> {
         let (mut call, output) = setup_recv_response_call();
 
         // Try to parse the response
