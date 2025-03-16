@@ -24,8 +24,8 @@ impl Scenario {
 impl Scenario {
     pub fn to_recv_request(&self) -> Reply<RecvRequest> {
         // Create a new Reply in the RecvRequest state
-        let reply = Reply::new().unwrap();
-        reply
+        
+        Reply::new().unwrap()
     }
 
     pub fn to_send_100(&self) -> Reply<Send100> {
@@ -56,8 +56,7 @@ impl Scenario {
         if self
             .request
             .headers()
-            .get("expect")
-            .map_or(false, |v| v == "100-continue")
+            .get("expect").is_some_and(|v| v == "100-continue")
         {
             match reply.proceed().unwrap() {
                 RecvRequestResult::Send100(reply) => {
@@ -91,8 +90,7 @@ impl Scenario {
         if self
             .request
             .headers()
-            .get("expect")
-            .map_or(false, |v| v == "100-continue")
+            .get("expect").is_some_and(|v| v == "100-continue")
         {
             match reply.proceed().unwrap() {
                 RecvRequestResult::Send100(reply) => {

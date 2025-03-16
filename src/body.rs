@@ -272,7 +272,7 @@ impl BodyReader {
         let ret = match Self::header_defined(http10, header_lookup)? {
             // Request bodies cannot be close delimited (even under http10).
             Self::CloseDelimited => Self::LengthDelimited(0),
-            r @ _ => r,
+            r => r,
         };
 
         Ok(ret)

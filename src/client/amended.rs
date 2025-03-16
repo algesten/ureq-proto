@@ -34,7 +34,7 @@ use crate::Error;
 /// 10. Changing the `Uri` when following redirect.
 ///
 pub(crate) struct AmendedRequest {
-    request: Request<Option<()>>,
+    request: Request<()>,
     uri: Option<Uri>,
     headers: Vec<(HeaderName, HeaderValue)>,
     unset: Vec<HeaderName>,
@@ -42,10 +42,8 @@ pub(crate) struct AmendedRequest {
 
 impl AmendedRequest {
     pub fn new(request: Request<()>) -> Self {
-        let (parts, body) = request.into_parts();
-
         AmendedRequest {
-            request: Request::from_parts(parts, Some(body)),
+            request,
             uri: None,
             headers: vec![],
             unset: vec![],
@@ -53,9 +51,8 @@ impl AmendedRequest {
     }
 
     pub fn take_request(&mut self) -> Request<()> {
-        let request = mem::replace(&mut self.request, Request::new(None));
-        let (parts, body) = request.into_parts();
-        Request::from_parts(parts, body.unwrap())
+        let empty = http::Request::new(());
+        mem::replace(&mut self.request, empty)
     }
 
     pub fn set_uri(&mut self, uri: Uri) {
