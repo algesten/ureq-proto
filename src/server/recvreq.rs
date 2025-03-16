@@ -17,12 +17,12 @@ impl Reply<RecvRequest> {
 
         let inner = Inner {
             phase: ResponsePhase::Status,
-            analyzed: false,
             state: super::BodyState::default(),
             response: None,
             close_reason,
             method: None,
             expect_100: false,
+            expect_100_reject: false,
         };
 
         Ok(Reply::wrap(inner))
@@ -106,7 +106,7 @@ impl Reply<RecvRequest> {
         } else if has_request_body {
             Some(RecvRequestResult::RecvBody(Reply::wrap(self.inner)))
         } else {
-            Some(RecvRequestResult::SendResponse(Reply::wrap(self.inner)))
+            Some(RecvRequestResult::ProvideResponse(Reply::wrap(self.inner)))
         }
     }
 }

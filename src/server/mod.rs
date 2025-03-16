@@ -15,7 +15,13 @@
 //!     │            │                        │
 //!     │            │                        │
 //!     │            ▼                        │
-//!     └─▶┌──────────────────┐◀──────────────┘
+//!     └─▶┌──────────────────┐               │
+//!        │  ProvideResponse │             reject
+//!        └──────────────────┘               │
+//!                  │                        │
+//!                  │                        │
+//!                  ▼                        │
+//!        ┌──────────────────┐◀──────────────┘
 //!        │   SendResponse   │──┐
 //!        └──────────────────┘  │
 //!                  │           │
@@ -37,13 +43,12 @@ use std::io::Write;
 use std::marker::PhantomData;
 
 use amended::AmendedResponse;
-use http::{header, Method, Request, Response, StatusCode, Version};
+use http::{Method, Response, StatusCode, Version};
 
 use crate::body::{BodyReader, BodyWriter};
-use crate::ext::{HeaderIterExt, MethodExt};
-use crate::parser::try_parse_request;
-use crate::util::{log_data, Writer};
-use crate::{ArrayVec, CloseReason, Error};
+use crate::ext::StatusCodeExt;
+use crate::util::Writer;
+use crate::{ArrayVec, CloseReason};
 
 mod amended;
 
@@ -60,16 +65,16 @@ pub struct Reply<State, B = ()> {
 #[derive(Debug)]
 pub(crate) struct Inner<B> {
     pub phase: ResponsePhase,
-    pub analyzed: bool,
     pub state: BodyState,
     pub response: Option<AmendedResponse<B>>,
     pub close_reason: ArrayVec<CloseReason, 4>,
     pub method: Option<Method>,
     pub expect_100: bool,
+    pub expect_100_reject: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ResponsePhase {
+pub(crate) enum ResponsePhase {
     Status,
     Headers(usize),
     Body,
@@ -112,6 +117,7 @@ pub mod state {
     reply_state!(RecvRequest);
     reply_state!(Send100);
     reply_state!(RecvBody);
+    reply_state!(ProvideResponse);
     reply_state!(SendResponse);
     reply_state!(SendBody);
     reply_state!(Cleanup);
@@ -152,21 +158,22 @@ pub enum RecvRequestResult {
     /// Receive a request body.
     RecvBody(Reply<RecvBody>),
     /// Client did not send a body.
-    SendResponse(Reply<SendResponse>),
+    ProvideResponse(Reply<ProvideResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND 100
 
 mod send100;
 
-fn append_request<B0, B>(
-    inner: Inner<B0>,
-    response: Response<B>,
-    default_body_mode: BodyWriter,
-) -> Inner<B> {
+fn append_request<B0, B>(inner: Inner<B0>, response: Response<B>) -> Inner<B> {
+    let default_body_mode = if response.status().body_allowed() {
+        BodyWriter::new_chunked()
+    } else {
+        BodyWriter::new_none()
+    };
+
     Inner {
         phase: inner.phase,
-        analyzed: inner.analyzed,
         state: BodyState {
             writer: Some(default_body_mode),
             ..inner.state
@@ -175,6 +182,7 @@ fn append_request<B0, B>(
         close_reason: inner.close_reason,
         method: inner.method,
         expect_100: inner.expect_100,
+        expect_100_reject: inner.expect_100_reject,
     }
 }
 
@@ -193,6 +201,10 @@ fn do_write_send_line(line: (Version, StatusCode), w: &mut Writer, end_head: boo
 
 // //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
 
+mod provres;
+
+// //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
+
 mod recvbody;
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND RESPONSE
@@ -205,7 +217,7 @@ mod sendbody;
 
 // //////////////////////////////////////////////////////////////////////////////////////////// CLEANUP
 
-impl<B> Reply<B, Cleanup> {
+impl<B> Reply<Cleanup, B> {
     /// Tell if we must close the connection.
     pub fn must_close_connection(&self) -> bool {
         self.close_reason().is_some()

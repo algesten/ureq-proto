@@ -1,6 +1,6 @@
 use std::fmt;
 
-use http::{header, HeaderMap, HeaderName, HeaderValue, Response, StatusCode, Version};
+use http::{header, HeaderName, HeaderValue, Response, StatusCode, Version};
 
 use crate::body::BodyWriter;
 use crate::util::compare_lowercase_ascii;
@@ -39,10 +39,6 @@ impl<Body> AmendedResponse<Body> {
             .map_err(|e| Error::BadHeader(e.to_string()))?;
         self.headers.push((name, value));
         Ok(())
-    }
-
-    pub fn original_response_headers(&self) -> &HeaderMap {
-        self.response.headers()
     }
 
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
