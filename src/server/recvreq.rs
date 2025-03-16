@@ -1,4 +1,4 @@
-use http::{Request, Version};
+use http::{header, Request, Version};
 
 use crate::body::BodyReader;
 use crate::ext::{HeaderIterExt, MethodExt};
@@ -54,10 +54,21 @@ impl Reply<RecvRequest> {
         self.inner.method = Some(request.method().clone());
         self.inner.expect_100 = request.headers().iter().has_expect_100();
 
-        if request.version() == Version::HTTP_10 {
+        let headers = request.headers();
+        let is_http10 = request.version() == Version::HTTP_10;
+        let is_keep_alive = headers.iter().has(header::CONNECTION, "keep-alive");
+        let is_conn_close = headers.iter().has(header::CONNECTION, "close");
+
+        if is_http10 && !is_keep_alive {
             self.inner
                 .close_reason
                 .push(CloseReason::CloseDelimitedBody);
+        }
+
+        if is_conn_close {
+            self.inner
+                .close_reason
+                .push(CloseReason::ClientConnectionClose);
         }
 
         Ok((input_used, Some(request)))

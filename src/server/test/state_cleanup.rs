@@ -1,9 +1,11 @@
-use http::Response;
+use http::{Request, Response, Version};
+
+use crate::CloseReason;
 
 use super::scenario::Scenario;
 
 #[test]
-fn create_cleanup_state() {
+fn reuse_connection() {
     // Create a scenario with a GET request and a response
     let scenario = Scenario::builder()
         .get("/path")
@@ -19,44 +21,101 @@ fn create_cleanup_state() {
     // Get a Reply in the Cleanup state
     let reply = scenario.to_cleanup();
 
-    // Verify that we have a Reply<Cleanup>
-    // Just having this test pass means the type system correctly created a Reply<Cleanup>
+    // Verify that we don't need to close the connection
+    assert!(!reply.must_close_connection());
 }
 
 #[test]
-fn cleanup_after_content_length_response() {
-    // Create a scenario with a GET request and a response with content-length
+fn close_due_to_client_connection_close() {
+    // Create a scenario with a GET request with "connection: close" header
     let scenario = Scenario::builder()
-        .get("/path")
-        .response(Response::builder().status(200).body(()).unwrap())
-        .response_body(b"Hello, world!", false)
+        .request(
+            Request::get("/path")
+                .header("connection", "close")
+                .body(())
+                .unwrap(),
+        )
+        .response(
+            Response::builder()
+                .status(200)
+                .header("content-length", "0")
+                .body(())
+                .unwrap(),
+        )
         .build();
 
     // Get a Reply in the Cleanup state
     let reply = scenario.to_cleanup();
 
-    // Verify that we have a Reply<Cleanup>
-    // Just having this test pass means the type system correctly created a Reply<Cleanup>
+    // Verify that we must close the connection
+    assert!(reply.must_close_connection());
+
+    // Verify the close reason
+    let inner = reply.inner();
+    assert_eq!(
+        *inner.close_reason.first().unwrap(),
+        CloseReason::ClientConnectionClose
+    );
 }
 
 #[test]
-fn cleanup_after_chunked_response() {
-    // Create a scenario with a GET request and a chunked response
+fn close_due_to_server_connection_close() {
+    // Create a scenario with a GET request and a response with "connection: close" header
     let scenario = Scenario::builder()
         .get("/path")
         .response(
             Response::builder()
                 .status(200)
-                .header("transfer-encoding", "chunked")
+                .header("connection", "close")
+                .header("content-length", "0")
                 .body(())
                 .unwrap(),
         )
-        .response_body(b"Hello, world!", true)
         .build();
 
     // Get a Reply in the Cleanup state
     let reply = scenario.to_cleanup();
 
-    // Verify that we have a Reply<Cleanup>
-    // Just having this test pass means the type system correctly created a Reply<Cleanup>
+    // Verify that we must close the connection
+    assert!(reply.must_close_connection());
+
+    // Verify the close reason
+    let inner = reply.inner();
+    assert_eq!(
+        *inner.close_reason.first().unwrap(),
+        CloseReason::ServerConnectionClose
+    );
+}
+
+#[test]
+fn close_due_to_http10() {
+    // Create a scenario with an HTTP/1.0 request
+    let scenario = Scenario::builder()
+        .request(
+            Request::get("/path")
+                .version(Version::HTTP_10)
+                .body(())
+                .unwrap(),
+        )
+        .response(
+            Response::builder()
+                .status(200)
+                .header("content-length", "0")
+                .body(())
+                .unwrap(),
+        )
+        .build();
+
+    // Get a Reply in the Cleanup state
+    let reply = scenario.to_cleanup();
+
+    // Verify that we must close the connection
+    assert!(reply.must_close_connection());
+
+    // Verify the close reason
+    let inner = reply.inner();
+    assert_eq!(
+        *inner.close_reason.first().unwrap(),
+        CloseReason::CloseDelimitedBody
+    );
 }

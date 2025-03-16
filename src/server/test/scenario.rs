@@ -326,22 +326,6 @@ impl ScenarioBuilder<WithReq> {
 }
 
 impl ScenarioBuilder<WithRes> {
-    pub fn response_body<B: AsRef<[u8]>>(mut self, body: B, chunked: bool) -> Self {
-        let body = body.as_ref().to_vec();
-        let len = body.len();
-        self.response_body = body;
-
-        let (k, v) = if chunked {
-            ("transfer-encoding", "chunked".to_string())
-        } else {
-            ("content-length", len.to_string())
-        };
-
-        self.response.headers_mut().append(k, v.try_into().unwrap());
-
-        self
-    }
-
     pub fn build(self) -> Scenario {
         Scenario {
             request: self.request,
