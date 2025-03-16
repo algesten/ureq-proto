@@ -16,11 +16,15 @@ impl Reply<Send100> {
     /// Returns a tuple with the number of bytes written to the output buffer and
     /// the Reply in the RecvBody state.
     ///
-    /// Panics if the output buffer isn't large enough to contain the 100 Continue status line.
+    /// Returns an `Error::OutputOverflow` if the output buffer isn't large enough to
+    /// contain the 100 Continue status line.
     pub fn accept(self, output: &mut [u8]) -> Result<(usize, Reply<RecvBody>), Error> {
         let mut w = Writer::new(output);
 
-        do_write_send_line((Version::HTTP_11, StatusCode::CONTINUE), &mut w, true);
+        let success = do_write_send_line((Version::HTTP_11, StatusCode::CONTINUE), &mut w, true);
+        if !success {
+            return Err(Error::OutputOverflow);
+        }
 
         let output_used = w.len();
 

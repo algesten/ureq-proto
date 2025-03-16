@@ -199,6 +199,9 @@ use crate::{ArrayVec, CloseReason};
 
 mod amended;
 
+#[cfg(test)]
+mod test;
+
 /// Maximum number of headers to parse from an HTTP request.
 ///
 /// This constant defines the upper limit on the number of headers that can be
