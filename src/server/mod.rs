@@ -379,6 +379,7 @@ fn do_write_send_line(line: (Version, StatusCode), w: &mut Writer, end_head: boo
         )
     })
 }
+
 // //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
 
 mod provres;

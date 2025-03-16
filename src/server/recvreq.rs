@@ -102,8 +102,9 @@ impl Reply<RecvRequest> {
     /// In a real implementation, it would check if the request has been fully received
     /// and is ready to proceed to the next state.
     pub fn can_proceed(&self) -> bool {
-        todo!()
+        self.inner.state.reader.is_some()
     }
+
     /// Proceed to the next state.
     ///
     /// This returns `None` if we have not finished receiving the request. It is guaranteed that if
