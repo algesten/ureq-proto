@@ -8,6 +8,9 @@ use super::{do_write_send_line, Reply, ResponsePhase};
 impl<B> Reply<SendResponse, B> {
     /// Write the response headers to the output buffer.
     ///
+    /// Writes the response status line and headers to the output buffer.
+    /// May need to be called multiple times if the output buffer isn't large enough.
+    ///
     /// Returns the number of bytes written to the output buffer.
     pub fn write(&mut self, output: &mut [u8]) -> Result<usize, Error> {
         // unwrap is ok because we are not here without providing it
@@ -21,14 +24,20 @@ impl<B> Reply<SendResponse, B> {
         Ok(output_used)
     }
 
-    /// Whether the response has been fully written.
+    /// Whether the response headers have been fully written.
+    ///
+    /// Returns true if all response headers have been written and the state
+    /// is ready to proceed to sending the response body.
     pub fn is_finished(&self) -> bool {
         !self.inner.phase.is_prelude()
     }
 
     /// Proceed to sending a response body.
     ///
+    /// Transitions to the SendBody state to begin sending the response body.
     /// This is only possible when the response headers are fully written.
+    ///
+    /// Panics if the response headers have not been fully written.
     pub fn proceed(self) -> Reply<SendBody, B> {
         assert!(self.is_finished());
 

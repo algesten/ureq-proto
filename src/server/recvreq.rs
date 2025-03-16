@@ -11,7 +11,12 @@ use super::{Inner, Reply, ResponsePhase};
 use super::{RecvRequestResult, MAX_REQUEST_HEADERS};
 
 impl Reply<RecvRequest> {
-    /// Create a new Reply.
+    /// Create a new Reply in the RecvRequest state.
+    ///
+    /// This is the entry point for the server state machine. It creates a new Reply
+    /// in the RecvRequest state, ready to receive an HTTP request from a client.
+    ///
+    /// Returns an error if the Reply cannot be created.
     pub fn new() -> Result<Self, Error> {
         let close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
 
@@ -30,7 +35,13 @@ impl Reply<RecvRequest> {
 
     /// Try reading a request from the input.
     ///
-    /// The `(usize, Option<Request()>)` is `(input amount consumed, request`).
+    /// Attempts to parse an HTTP request from the input buffer. If the input buffer
+    /// doesn't contain a complete request, this method will return `Ok((0, None))`.
+    ///
+    /// Returns a tuple with the number of bytes consumed from the input and
+    /// the parsed request (or None if incomplete).
+    ///
+    /// Returns an error if there's a problem parsing the request.
     pub fn try_request(&mut self, input: &[u8]) -> Result<(usize, Option<Request<()>>), Error> {
         let maybe_request = self.do_try_request(input)?;
 
@@ -85,14 +96,23 @@ impl Reply<RecvRequest> {
         Ok(Some((input_used, request)))
     }
 
+    /// Check if the Reply can proceed to the next state.
+    ///
+    /// This method is currently not implemented and will panic if called.
+    /// In a real implementation, it would check if the request has been fully received
+    /// and is ready to proceed to the next state.
     pub fn can_proceed(&self) -> bool {
         todo!()
     }
-
     /// Proceed to the next state.
     ///
     /// This returns `None` if we have not finished receiving the request. It is guaranteed that if
     /// `can_proceed()` returns true, this will return `Some`.
+    ///
+    /// Returns one of the following variants of `RecvRequestResult`:
+    /// - `Send100` if the request included an "Expect: 100-continue" header
+    /// - `RecvBody` if the request has a body to receive
+    /// - `ProvideResponse` if the request doesn't have a body
     pub fn proceed(self) -> Option<RecvRequestResult> {
         if !self.can_proceed() {
             return None;

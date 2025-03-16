@@ -1,6 +1,23 @@
-#![allow(missing_docs)]
+//! HTTP/1.1 server protocol
 //!
+//! Sans-IO protocol impl, which means "writing" and "reading" are made via buffers
+//! rather than the Write/Read std traits.
 //!
+//! The [`Reply`] object attempts to encode correct HTTP/1.1 handling using
+//! state variables, for example `Reply<RecvRequest>` to represent the
+//! lifecycle stage where we are to receive a request.
+//!
+//! The states are:
+//!
+//! * **RecvRequest** - Receive the request, which is the method, path,
+//!   version and the request headers
+//! * **Send100** - If there is an `Expect: 100-continue` header, the
+//!   server should send a 100 Continue response before receiving the body
+//! * **RecvBody** - Receive the request body
+//! * **ProvideResponse** - Prepare a response to the request
+//! * **SendResponse** - Send the response status and headers
+//! * **SendBody** - Send the response body
+//! * **Cleanup** - Close the connection or prepare for the next request
 //!
 //! ```text
 //!        ┌──────────────────┐
@@ -37,7 +54,150 @@
 //!        │     Cleanup      │◀─┘
 //!        └──────────────────┘
 //! ```
-
+//!
+//! # Example
+//!
+//! ```
+//! use ureq_proto::server::*;
+//! use http::{Response, StatusCode, Version};
+//!
+//! // ********************************** RecvRequest
+//!
+//! // Create a new Reply in the RecvRequest state
+//! let mut reply = Reply::new().unwrap();
+//!
+//! // Receive a request from the client
+//! let input = b"GET /my-path HTTP/1.1\r\nhost: example.test\r\nexpect: 100-continue\r\n\r\n";
+//! let (input_used, request) = reply.try_request(input).unwrap();
+//!
+//! assert_eq!(input_used, 67);
+//! let request = request.unwrap();
+//! assert_eq!(request.uri().path(), "/my-path");
+//! assert_eq!(request.method(), "GET");
+//!
+//! // Check if we can proceed to the next state
+//! // In a real server, you would implement this method
+//! // let can_proceed = reply.can_proceed();
+//!
+//! // Proceed to the next state
+//! let reply = reply.proceed().unwrap();
+//!
+//! // ********************************** Send100
+//!
+//! // In this example, we know the next state is Send100 because
+//! // the request included an "Expect: 100-continue" header.
+//! // A real server needs to match on the variants.
+//! let reply = match reply {
+//!     RecvRequestResult::Send100(v) => v,
+//!     _ => panic!(),
+//! };
+//!
+//! // We can either accept or reject the 100-continue request
+//! // Here we accept it and proceed to receiving the body
+//! let mut output = vec![0_u8; 1024];
+//! let (output_used, reply) = reply.accept(&mut output).unwrap();
+//!
+//! assert_eq!(output_used, 25);
+//! assert_eq!(&output[..output_used], b"HTTP/1.1 100 Continue\r\n\r\n");
+//!
+//! // ********************************** RecvBody
+//!
+//! // Now we can receive the request body
+//! let mut reply = reply;
+//!
+//! // Receive the body in chunks
+//! let input = b"hello";
+//! let mut body_buffer = vec![0_u8; 1024];
+//! let (input_used, output_used) = reply.read(input, &mut body_buffer).unwrap();
+//!
+//! assert_eq!(input_used, 5);
+//! assert_eq!(output_used, 5);
+//! assert_eq!(&body_buffer[..output_used], b"hello");
+//!
+//! // Check if the body is fully received
+//! // In this example, we'll assume it is
+//! assert!(reply.is_ended());
+//!
+//! // Proceed to providing a response
+//! let reply = reply.proceed().unwrap();
+//!
+//! // ********************************** ProvideResponse
+//!
+//! // Create a response
+//! let response = Response::builder()
+//!     .status(StatusCode::OK)
+//!     .header("content-type", "text/plain")
+//!     .body(())
+//!     .unwrap();
+//!
+//! // Provide the response and proceed to sending it
+//! let mut reply = reply.provide(response).unwrap();
+//!
+//! // ********************************** SendResponse
+//!
+//! // Send the response headers
+//! let output_used = reply.write(&mut output).unwrap();
+//!
+//! assert_eq!(&output[..output_used], b"\
+//!     HTTP/1.1 200 OK\r\n\
+//!     content-type: text/plain\r\n\
+//!     transfer-encoding: chunked\r\n\
+//!     \r\n");
+//!
+//! // Check if the response headers are fully sent
+//! assert!(reply.is_finished());
+//!
+//! // Proceed to sending the response body
+//! let mut reply = reply.proceed();
+//!
+//! // ********************************** SendBody
+//!
+//! // Send the response body
+//! let (input_used, output_used) = reply.write(b"hello world", &mut output).unwrap();
+//!
+//! assert_eq!(input_used, 11);
+//! assert_eq!(&output[..output_used], b"b\r\nhello world\r\n");
+//!
+//! // Indicate the end of the body with an empty input
+//! let (input_used, output_used) = reply.write(&[], &mut output).unwrap();
+//!
+//! assert_eq!(input_used, 0);
+//! assert_eq!(&output[..output_used], b"0\r\n\r\n");
+//!
+//! // Check if the body is fully sent
+//! assert!(reply.is_finished());
+//!
+//! // ********************************** Cleanup
+//!
+//! // Proceed to cleanup
+//! let reply = reply.proceed();
+//!
+//! // Check if we need to close the connection
+//! if reply.must_close_connection() {
+//!     // connection.close();
+//! } else {
+//!     // Prepare for the next request
+//!     // let new_reply = Reply::new().unwrap();
+//! }
+//! ```
+//!
+//! # In scope:
+//!
+//! * First class HTTP/1.1 protocol implementation
+//! * Indication of connection states (such as when a connection must be closed)
+//! * transfer-encoding: chunked
+//! * 100-continue handling
+//!
+//! # Out of scope:
+//!
+//! * Opening/closing sockets
+//! * TLS (https)
+//! * Request routing
+//! * Body data transformations (charset, compression etc)
+//!
+//! # The http crate
+//!
+//! Based on the [http crate](https://crates.io/crates/http) - a unified HTTP API for Rust.
 use std::fmt;
 use std::io::Write;
 use std::marker::PhantomData;
@@ -52,10 +212,24 @@ use crate::{ArrayVec, CloseReason};
 
 mod amended;
 
-/// Max number of headers to parse from an HTTP requst
+/// Maximum number of headers to parse from an HTTP request.
+///
+/// This constant defines the upper limit on the number of headers that can be
+/// parsed from an incoming HTTP request. Requests with more headers than this
+/// will be rejected.
 pub const MAX_REQUEST_HEADERS: usize = 128;
 
-/// [state graph][crate::server]
+/// A state machine for an HTTP request/response cycle.
+///
+/// This type represents a state machine that transitions through various
+/// states during the lifecycle of an HTTP request/response.
+///
+/// The type parameters are:
+/// - `State`: The current state of the state machine (e.g., `RecvRequest`, `SendResponse`, etc.)
+/// - `B`: The type of the response body (defaults to `()`)
+///
+/// See the [state graph][crate::server] in the server module documentation for a
+/// visual representation of the state transitions.
 pub struct Reply<State, B = ()> {
     inner: Inner<B>,
     _ph: PhantomData<State>,
@@ -165,6 +339,10 @@ pub enum RecvRequestResult {
 
 mod send100;
 
+/// Internal function to append a response to an existing inner state.
+///
+/// This function is used when transitioning from a state that has received a request
+/// to a state that will send a response.
 fn append_request<B0, B>(inner: Inner<B0>, response: Response<B>) -> Inner<B> {
     let default_body_mode = if response.status().body_allowed() {
         BodyWriter::new_chunked()
@@ -186,6 +364,9 @@ fn append_request<B0, B>(inner: Inner<B0>, response: Response<B>) -> Inner<B> {
     }
 }
 
+/// Internal function to write a status line to a writer.
+///
+/// This function is used when sending a response status line.
 fn do_write_send_line(line: (Version, StatusCode), w: &mut Writer, end_head: bool) -> bool {
     w.try_write(|w| {
         write!(
@@ -198,7 +379,6 @@ fn do_write_send_line(line: (Version, StatusCode), w: &mut Writer, end_head: boo
         )
     })
 }
-
 // //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
 
 mod provres;

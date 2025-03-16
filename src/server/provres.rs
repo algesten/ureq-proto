@@ -6,6 +6,10 @@ use super::state::{ProvideResponse, SendResponse};
 use super::{append_request, Reply};
 
 impl Reply<ProvideResponse> {
+    /// Provide a response to the client's request.
+    ///
+    /// Takes a Response object and transitions to the SendResponse state.
+    /// Handles setting appropriate headers for the response body if they weren't already set.
     pub fn provide<B>(self, response: Response<B>) -> Result<Reply<SendResponse, B>, Error> {
         if self.inner.expect_100_reject
             && !response.status().is_client_error()

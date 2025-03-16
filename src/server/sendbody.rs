@@ -82,7 +82,7 @@ impl<B> Reply<SendBody, B> {
         calculate_max_input(output_len)
     }
 
-    /// Test if call is chunked.
+    /// Test if the response is using chunked transfer encoding.
     pub fn is_chunked(&self) -> bool {
         self.inner.state.writer.as_ref().unwrap().is_chunked()
     }
@@ -96,9 +96,12 @@ impl<B> Reply<SendBody, B> {
         self.inner.state.writer.as_ref().unwrap().is_ended()
     }
 
-    /// Proceed to the next state.
+    /// Proceed to the Cleanup state.
     ///
+    /// Transitions to the Cleanup state after the response body has been fully sent.
     /// This is only possible when the response body is fully sent.
+    ///
+    /// Panics if the response body has not been fully sent.
     pub fn proceed(self) -> Reply<Cleanup, B> {
         assert!(self.is_finished());
 

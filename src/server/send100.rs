@@ -7,11 +7,16 @@ use super::state::{ProvideResponse, RecvBody, Send100};
 use super::{do_write_send_line, Reply};
 
 impl Reply<Send100> {
-    /// Sends a 100 Continue response.
+    /// Sends a 100 Continue response and proceeds to receiving the body.
     ///
-    /// This proceeds to receiving the body.
+    /// This method sends an HTTP 100 Continue response to the client, indicating that
+    /// the server is willing to accept the request body. After sending the response,
+    /// it transitions to the RecvBody state to receive the request body.
     ///
-    /// Panics if output isn't large enough to contain the 100 Continue status line.
+    /// Returns a tuple with the number of bytes written to the output buffer and
+    /// the Reply in the RecvBody state.
+    ///
+    /// Panics if the output buffer isn't large enough to contain the 100 Continue status line.
     pub fn accept(self, output: &mut [u8]) -> Result<(usize, Reply<RecvBody>), Error> {
         let mut w = Writer::new(output);
 
@@ -24,8 +29,13 @@ impl Reply<Send100> {
         Ok((output_used, flow))
     }
 
-    pub fn reject(mut self) -> Result<Reply<ProvideResponse>, Error> {
+    /// Rejects the 100 Continue request and proceeds to providing a response.
+    ///
+    /// This method rejects the client's "Expect: 100-continue" request and transitions
+    /// to the ProvideResponse state. The server should then provide an error response
+    /// (typically a 4xx or 5xx status code) to indicate why the request was rejected.
+    pub fn reject(mut self) -> Reply<ProvideResponse> {
         self.inner.expect_100_reject = true;
-        Ok(Reply::wrap(self.inner))
+        Reply::wrap(self.inner)
     }
 }
