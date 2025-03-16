@@ -1,5 +1,6 @@
 use crate::Error;
 
+use super::super::SendResponseResult;
 use super::scenario::Scenario;
 
 #[test]
@@ -71,8 +72,11 @@ fn short_buffer() {
 
 #[test]
 fn proceed_to_send_body() {
-    // Create a scenario with a GET request
-    let scenario = Scenario::builder().get("/path").build();
+    // Create a scenario with a GET request that should have a body
+    let scenario = Scenario::builder()
+        .get("/path")
+        .header("content-type", "text/plain")
+        .build();
 
     // Get a Reply in the SendResponse state
     let mut reply = scenario.to_send_response();
@@ -85,8 +89,37 @@ fn proceed_to_send_body() {
         let _ = reply.write(&mut output).unwrap();
     }
 
-    // Proceed to SendBody
-    let _ = reply.proceed();
+    // Proceed and verify we get SendBody variant
+    match reply.proceed() {
+        SendResponseResult::SendBody(_) => {}
+        SendResponseResult::Cleanup(_) => panic!("Expected SendBody variant"),
+    }
+}
+
+#[test]
+fn proceed_to_cleanup() {
+    // Create a scenario with a HEAD request (should never have a body)
+    let scenario = Scenario::builder()
+        .head("/path")
+        .header("content-type", "text/plain")
+        .build();
+
+    // Get a Reply in the SendResponse state
+    let mut reply = scenario.to_send_response();
+
+    // Create a buffer to write the response to
+    let mut output = [0u8; 1024];
+
+    // Write the response until finished
+    while !reply.is_finished() {
+        let _ = reply.write(&mut output).unwrap();
+    }
+
+    // Proceed and verify we get Cleanup variant
+    match reply.proceed() {
+        SendResponseResult::Cleanup(_) => {}
+        SendResponseResult::SendBody(_) => panic!("Expected Cleanup variant"),
+    }
 }
 
 #[test]

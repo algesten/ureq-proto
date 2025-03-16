@@ -209,7 +209,9 @@ fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &m
             let all = request.headers();
             let skipped = all.skip(*index);
 
-            do_write_headers(skipped, index, header_count - 1, w);
+            if header_count > 0 {
+                do_write_headers(skipped, index, header_count - 1, w);
+            }
 
             if *index == header_count {
                 state.phase = RequestPhase::Body;

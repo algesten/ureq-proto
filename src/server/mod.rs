@@ -152,7 +152,9 @@
 //! assert!(reply.is_finished());
 //!
 //! // Proceed to sending the response body
-//! let mut reply = reply.proceed();
+//! let SendResponseResult::SendBody(mut reply) = reply.proceed() else {
+//!     panic!("Expected SendBody");
+//! };
 //!
 //! // ********************************** SendBody
 //!
@@ -260,6 +262,17 @@ pub(crate) struct BodyState {
     writer: Option<BodyWriter>,
     stop_on_chunk_boundary: bool,
 }
+
+impl BodyState {
+    pub(crate) fn need_response_body(&self, method: &Method) -> bool {
+        // HEAD requests never have a body, regardless of what the writer says
+        if *method == Method::HEAD {
+            return false;
+        }
+        // unwrap is ok because we only use this after the writer is set.
+        self.writer.as_ref().unwrap().has_body()
+    }
+}
 #[doc(hidden)]
 pub mod state {
     pub(crate) trait Named {
@@ -334,7 +347,10 @@ mod send100;
 /// This function is used when transitioning from a state that has received a request
 /// to a state that will send a response.
 fn append_request(inner: Inner, response: Response<()>) -> Inner {
-    let default_body_mode = if response.status().body_allowed() {
+    // unwrap is ok because method is set early.
+    let is_head = inner.method.as_ref().unwrap() == Method::HEAD;
+
+    let default_body_mode = if !is_head && response.status().body_allowed() {
         BodyWriter::new_chunked()
     } else {
         BodyWriter::new_none()
@@ -381,6 +397,20 @@ mod recvbody;
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND RESPONSE
 
 mod sendres;
+
+/// The possible states after sending a response.
+///
+/// After sending the response headers, the reply can transition to one of two states:
+/// - `SendBody`: If the response has a body that needs to be sent
+/// - `Cleanup`: If the response has no body (e.g., HEAD requests, 204 responses)
+///
+/// See the [state graph][crate::server] for a visual representation.
+pub enum SendResponseResult {
+    /// Send the response body.
+    SendBody(Reply<SendBody>),
+    /// Proceed directly to cleanup without sending a body.
+    Cleanup(Reply<Cleanup>),
+}
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND RESPONSE
 

@@ -5,8 +5,8 @@ use http::{HeaderName, HeaderValue};
 use crate::util::Writer;
 use crate::Error;
 
-use super::state::{SendBody, SendResponse};
-use super::{do_write_send_line, Reply, ResponsePhase};
+use super::state::SendResponse;
+use super::{do_write_send_line, Reply, ResponsePhase, SendResponseResult};
 
 impl Reply<SendResponse> {
     /// Write the response headers to the output buffer.
@@ -35,17 +35,28 @@ impl Reply<SendResponse> {
         !self.inner.phase.is_prelude()
     }
 
-    /// Proceed to sending a response body.
+    /// Proceed to sending a response body or cleanup.
     ///
-    /// Transitions to the SendBody state to begin sending the response body.
+    /// Transitions to either:
+    /// - SendBody state if the response needs a body (based on status code and method)
+    /// - Cleanup state if no response body should be sent (e.g., HEAD requests)
+    ///
     /// This is only possible when the response headers are fully written.
     ///
     /// Panics if the response headers have not been fully written.
-    pub fn proceed(self) -> Reply<SendBody> {
+    pub fn proceed(self) -> SendResponseResult {
         assert!(self.is_finished());
 
         let inner = self.inner;
-        Reply::wrap(inner)
+
+        let method = inner.method.as_ref().unwrap();
+
+        // unwrap is ok because method is always set during request parsing
+        if inner.state.need_response_body(method) {
+            SendResponseResult::SendBody(Reply::wrap(inner))
+        } else {
+            SendResponseResult::Cleanup(Reply::wrap(inner))
+        }
     }
 }
 
@@ -90,7 +101,9 @@ fn try_write_prelude_part(
             let all = response.headers();
             let skipped = all.skip(*index);
 
-            do_write_headers(skipped, index, header_count - 1, w);
+            if header_count > 0 {
+                do_write_headers(skipped, index, header_count - 1, w);
+            }
 
             if *index == header_count {
                 *phase = ResponsePhase::Body;

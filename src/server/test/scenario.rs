@@ -6,7 +6,7 @@ use http::{Method, Request, Response};
 use crate::server::state::{
     Cleanup, ProvideResponse, RecvBody, RecvRequest, Send100, SendBody, SendResponse,
 };
-use crate::server::{RecvRequestResult, Reply};
+use crate::server::{RecvRequestResult, Reply, SendResponseResult};
 
 pub struct Scenario {
     request: Request<()>,
@@ -159,7 +159,12 @@ impl Scenario {
         let mut output = vec![0; 1024];
         reply.write(&mut output).unwrap();
 
-        reply.proceed()
+        match reply.proceed() {
+            SendResponseResult::SendBody(reply) => reply,
+            SendResponseResult::Cleanup(_) => {
+                panic!("Expected SendBody variant, got Cleanup. This usually means the response doesn't need a body (e.g., HEAD request or 204 response)")
+            }
+        }
     }
 
     pub fn to_cleanup(&self) -> Reply<Cleanup> {
