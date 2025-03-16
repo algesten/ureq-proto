@@ -4,9 +4,10 @@ use crate::parser::try_parse_response;
 use crate::Error;
 
 use super::state::Await100;
-use super::{Await100Result, Call, CloseReason};
+use super::{Await100Result, Call};
+use crate::CloseReason;
 
-impl<B> Call<B, Await100> {
+impl Call<Await100> {
     /// Attempt to read a 100-continue response.
     ///
     /// Tries to interpret bytes sent by the server as a 100-continue response. The expect-100 mechanic
@@ -83,7 +84,7 @@ impl<B> Call<B, Await100> {
     }
 
     /// Proceed to the next state.
-    pub fn proceed(self) -> Result<Await100Result<B>, Error> {
+    pub fn proceed(self) -> Result<Await100Result, Error> {
         // We can always proceed out of Await100
 
         if self.inner.should_send_body {

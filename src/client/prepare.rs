@@ -8,17 +8,17 @@ use crate::{ArrayVec, Error};
 use super::state::{Prepare, SendRequest};
 use super::{BodyState, Call, CloseReason, Inner};
 
-impl<B> Call<B, Prepare> {
+impl Call<Prepare> {
     /// Create a new Call instance from an HTTP request.
     ///
     /// This initializes a new Call state machine in the Prepare state,
     /// setting up the necessary internal state based on the request properties.
-    pub fn new(request: Request<B>) -> Result<Self, Error> {
-        let mut close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
+    pub fn new(request: Request<()>) -> Result<Self, Error> {
+        let mut close_reason = ArrayVec::from_fn(|_| CloseReason::ClientConnectionClose);
 
         if request.version() == Version::HTTP_10 {
             // request.analyze() in CallHolder::new() ensures the only versions are HTTP 1.0 and 1.1
-            close_reason.push(CloseReason::Http10)
+            close_reason.push(CloseReason::CloseDelimitedBody)
         }
 
         if request.headers().iter().has(header::CONNECTION, "close") {
@@ -105,7 +105,7 @@ impl<B> Call<B, Prepare> {
     }
 
     /// Continue to the next call state.
-    pub fn proceed(self) -> Call<B, SendRequest> {
+    pub fn proceed(self) -> Call<SendRequest> {
         Call::wrap(self.inner)
     }
 }
