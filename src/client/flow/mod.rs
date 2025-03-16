@@ -6,9 +6,9 @@
 //!
 //! ## State Machine
 //!
-//! The Flow type represents a state machine that transitions through various states
+//! The Call type represents a state machine that transitions through various states
 //! during the lifecycle of an HTTP request/response. Each state is represented by a
-//! different type parameter to `Flow<B, State>`, ensuring at compile time that
+//! different type parameter to `Call<B, State>`, ensuring at compile time that
 //! operations are performed in the correct order.
 //!
 //! For a visual representation of the state transitions, see the
@@ -30,11 +30,11 @@
 //! ## Usage
 //!
 //! See the [example in the client module][crate::client] for a comprehensive
-//! demonstration of how to use the Flow API to handle an HTTP request/response cycle.
+//! demonstration of how to use the Call API to handle an HTTP request/response cycle.
 //!
 //! ## Design
 //!
-//! The Flow module is designed as a "sans-IO" implementation, meaning it doesn't
+//! The Call module is designed as a "sans-IO" implementation, meaning it doesn't
 //! directly perform I/O operations. Instead, it works with buffers that the caller
 //! is responsible for reading from or writing to the network. This design allows
 //! for greater flexibility in how I/O is handled and makes the code easier to test.

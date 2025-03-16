@@ -228,8 +228,6 @@ impl<Body> AmendedRequest<Body> {
             wanted_mode
         };
 
-        // Method body validation is skipped in the Flow API
-
         Ok(RequestInfo {
             body_mode,
             req_host_header,

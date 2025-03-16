@@ -4,9 +4,9 @@ use crate::parser::try_parse_response;
 use crate::Error;
 
 use super::state::Await100;
-use super::{Await100Result, CloseReason, Flow};
+use super::{Await100Result, Call, CloseReason};
 
-impl<B> Flow<B, Await100> {
+impl<B> Call<B, Await100> {
     /// Attempt to read a 100-continue response.
     ///
     /// Tries to interpret bytes sent by the server as a 100-continue response. The expect-100 mechanic
@@ -88,11 +88,11 @@ impl<B> Flow<B, Await100> {
 
         if self.inner.should_send_body {
             // TODO(martin): do i need this?
-            // flow.inner.call.analyze_request()?;
-            let flow = Flow::wrap(self.inner);
-            Ok(Await100Result::SendBody(flow))
+            // call.inner.call.analyze_request()?;
+            let call = Call::wrap(self.inner);
+            Ok(Await100Result::SendBody(call))
         } else {
-            Ok(Await100Result::RecvResponse(Flow::wrap(self.inner)))
+            Ok(Await100Result::RecvResponse(Call::wrap(self.inner)))
         }
     }
 }

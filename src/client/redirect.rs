@@ -5,12 +5,12 @@ use crate::ext::{MethodExt, StatusExt};
 use crate::Error;
 
 use super::state::{Cleanup, Prepare, Redirect};
-use super::{Flow, RedirectAuthHeaders};
+use super::{Call, RedirectAuthHeaders};
 
-impl<B> Flow<B, Redirect> {
-    /// Construct a new `Flow` by following the redirect.
+impl<B> Call<B, Redirect> {
+    /// Construct a new `Call` by following the redirect.
     ///
-    /// There are some rules when follwing a redirect.
+    /// There are some rules when following a redirect.
     ///
     /// * For 307/308
     ///     * POST/PUT results in `None`, since we do not allow redirecting a request body
@@ -19,10 +19,10 @@ impl<B> Flow<B, Redirect> {
     /// * Other redirect (301, 302, etc)
     ///     * HEAD results in HEAD in the redirect
     ///     * All other methods becomes GET
-    pub fn as_new_flow(
+    pub fn as_new_call(
         &mut self,
         redirect_auth_headers: RedirectAuthHeaders,
-    ) -> Result<Option<Flow<B, Prepare>>, Error> {
+    ) -> Result<Option<Call<B, Prepare>>, Error> {
         let header = match &self.inner.location {
             Some(v) => v,
             None => return Err(Error::NoLocationHeader),
@@ -72,7 +72,7 @@ impl<B> Flow<B, Redirect> {
         *request.method_mut() = new_method;
 
         // Next state
-        let mut next = Flow::new(request)?;
+        let mut next = Call::new(request)?;
 
         let request = &mut next.inner.request;
 
@@ -100,7 +100,7 @@ impl<B> Flow<B, Redirect> {
         self.inner.status.unwrap()
     }
 
-    /// Whether we must close the connection corresponding to the current flow.
+    /// Whether we must close the connection corresponding to the current call.
     ///
     /// This is used to inform connection pooling.
     pub fn must_close_connection(&self) -> bool {
@@ -113,8 +113,8 @@ impl<B> Flow<B, Redirect> {
     }
 
     /// Proceed to the cleanup state.
-    pub fn proceed(self) -> Flow<B, Cleanup> {
-        Flow::wrap(self.inner)
+    pub fn proceed(self) -> Call<B, Cleanup> {
+        Call::wrap(self.inner)
     }
 }
 

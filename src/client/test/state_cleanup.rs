@@ -13,9 +13,9 @@ fn reuse_without_send_body() {
         .recv_body("hello", false)
         .build();
 
-    let flow = scenario.to_cleanup();
+    let call = scenario.to_cleanup();
 
-    assert!(!flow.must_close_connection());
+    assert!(!call.must_close_connection());
 }
 
 #[test]
@@ -27,9 +27,9 @@ fn reuse_with_send_body() {
         .recv_body("hello", false)
         .build();
 
-    let flow = scenario.to_cleanup();
+    let call = scenario.to_cleanup();
 
-    assert!(!flow.must_close_connection());
+    assert!(!call.must_close_connection());
 }
 
 #[test]
@@ -39,9 +39,9 @@ fn reuse_without_recv_body() {
         .response(Response::new(()))
         .build();
 
-    let flow = scenario.to_cleanup();
+    let call = scenario.to_cleanup();
 
-    assert!(!flow.must_close_connection());
+    assert!(!call.must_close_connection());
 }
 
 #[test]
@@ -51,9 +51,9 @@ fn reuse_after_redirect() {
         .redirect(StatusCode::FOUND, "https://b.test")
         .build();
 
-    let flow = scenario.to_cleanup();
+    let call = scenario.to_cleanup();
 
-    assert!(!flow.must_close_connection());
+    assert!(!call.must_close_connection());
 }
 
 #[test]
@@ -67,11 +67,11 @@ fn close_due_to_http10() {
         )
         .build();
 
-    let flow = scenario.to_cleanup();
-    let inner = flow.inner();
+    let call = scenario.to_cleanup();
+    let inner = call.inner();
     assert_eq!(*inner.close_reason.first().unwrap(), CloseReason::Http10);
 
-    assert!(flow.must_close_connection());
+    assert!(call.must_close_connection());
 }
 
 #[test]
@@ -81,14 +81,14 @@ fn close_due_to_client_connection_close() {
         .header("connection", "close")
         .build();
 
-    let flow = scenario.to_cleanup();
-    let inner = flow.inner();
+    let call = scenario.to_cleanup();
+    let inner = call.inner();
     assert_eq!(
         *inner.close_reason.first().unwrap(),
         CloseReason::ClientConnectionClose
     );
 
-    assert!(flow.must_close_connection());
+    assert!(call.must_close_connection());
 }
 
 #[test]
@@ -103,14 +103,14 @@ fn close_due_to_server_connection_close() {
         )
         .build();
 
-    let flow = scenario.to_cleanup();
-    let inner = flow.inner();
+    let call = scenario.to_cleanup();
+    let inner = call.inner();
     assert_eq!(
         *inner.close_reason.first().unwrap(),
         CloseReason::ServerConnectionClose
     );
 
-    assert!(flow.must_close_connection());
+    assert!(call.must_close_connection());
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn close_due_to_not_100_continue() {
         .send_body("hi", false)
         .build();
 
-    let mut flow = scenario.to_await_100();
+    let mut call = scenario.to_await_100();
 
     let input = write_response(
         &Response::builder()
@@ -129,9 +129,9 @@ fn close_due_to_not_100_continue() {
             .body(())
             .unwrap(),
     );
-    flow.try_read_100(&input).unwrap();
+    call.try_read_100(&input).unwrap();
 
-    let inner = flow.inner();
+    let inner = call.inner();
     assert_eq!(
         *inner.close_reason.first().unwrap(),
         CloseReason::Not100Continue
@@ -143,12 +143,12 @@ fn close_due_to_close_delimited_body() {
     // no content-length or transfer-encoding
     let scenario = Scenario::builder().get("https://a.test").build();
 
-    let flow = scenario.to_cleanup();
-    let inner = flow.inner();
+    let call = scenario.to_cleanup();
+    let inner = call.inner();
     assert_eq!(
         *inner.close_reason.first().unwrap(),
         CloseReason::CloseDelimitedBody
     );
 
-    assert!(flow.must_close_connection());
+    assert!(call.must_close_connection());
 }

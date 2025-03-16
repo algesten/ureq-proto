@@ -11,9 +11,9 @@ use crate::util::{AuthorityExt, Writer};
 use crate::Error;
 
 use super::state::SendRequest;
-use super::{BodyState, Flow, RequestPhase, SendRequestResult};
+use super::{BodyState, Call, RequestPhase, SendRequestResult};
 
-impl<B> Flow<B, SendRequest> {
+impl<B> Call<B, SendRequest> {
     /// Write the request to the buffer.
     ///
     /// Writes incrementally, it can be called repeatedly in situations where the output
@@ -95,16 +95,16 @@ impl<B> Flow<B, SendRequest> {
 
         if self.inner.should_send_body {
             if self.inner.await_100_continue {
-                Ok(Some(SendRequestResult::Await100(Flow::wrap(self.inner))))
+                Ok(Some(SendRequestResult::Await100(Call::wrap(self.inner))))
             } else {
                 // TODO(martin): is this needed?
                 self.maybe_analyze_request()?;
-                let flow = Flow::wrap(self.inner);
-                Ok(Some(SendRequestResult::SendBody(flow)))
+                let call = Call::wrap(self.inner);
+                Ok(Some(SendRequestResult::SendBody(call)))
             }
         } else {
-            let flow = Flow::wrap(self.inner);
-            Ok(Some(SendRequestResult::RecvResponse(flow)))
+            let call = Call::wrap(self.inner);
+            Ok(Some(SendRequestResult::RecvResponse(call)))
         }
     }
 

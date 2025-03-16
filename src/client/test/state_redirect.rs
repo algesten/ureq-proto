@@ -46,13 +46,13 @@ fn absolute_url() {
         .redirect(StatusCode::FOUND, "https://b.test")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://b.test/");
+    assert_eq!(&call.uri().to_string(), "https://b.test/");
 }
 
 #[test]
@@ -62,13 +62,13 @@ fn relative_url_absolute_path() {
         .redirect(StatusCode::FOUND, "/foo.html")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://a.test/foo.html");
+    assert_eq!(&call.uri().to_string(), "https://a.test/foo.html");
 }
 
 #[test]
@@ -78,13 +78,13 @@ fn relative_url_relative_path() {
         .redirect(StatusCode::FOUND, "y/bar.html")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://a.test/x/y/bar.html");
+    assert_eq!(&call.uri().to_string(), "https://a.test/x/y/bar.html");
 }
 
 #[test]
@@ -94,13 +94,13 @@ fn relative_url_parent_relative() {
         .redirect(StatusCode::FOUND, "../bar.html")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://a.test/bar.html");
+    assert_eq!(&call.uri().to_string(), "https://a.test/bar.html");
 }
 
 #[test]
@@ -110,13 +110,13 @@ fn relative_url_dot_relative() {
         .redirect(StatusCode::FOUND, "./bar.html")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://a.test/x/bar.html");
+    assert_eq!(&call.uri().to_string(), "https://a.test/x/bar.html");
 }
 
 #[test]
@@ -126,13 +126,13 @@ fn relative_url_dot_dotdot_relative() {
         .redirect(StatusCode::FOUND, "./../bar.html")
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://a.test/bar.html");
+    assert_eq!(&call.uri().to_string(), "https://a.test/bar.html");
 }
 
 #[test]
@@ -144,7 +144,7 @@ fn relative_url_parent_overflow_relative() {
 
     let error = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap_err();
 
     assert_eq!(
@@ -169,13 +169,13 @@ fn last_location_header() {
         )
         .build();
 
-    let flow = scenario
+    let call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap();
 
-    assert_eq!(&flow.uri().to_string(), "https://e.test/");
+    assert_eq!(&call.uri().to_string(), "https://e.test/");
 }
 
 #[test]
@@ -248,7 +248,7 @@ fn change_redirect_methods() {
 
             let maybe_state = scenario
                 .to_redirect()
-                .as_new_flow(RedirectAuthHeaders::Never)
+                .as_new_call(RedirectAuthHeaders::Never)
                 .unwrap();
             if let Some(state) = maybe_state {
                 let inner = state.inner();
@@ -276,16 +276,16 @@ fn keep_auth_header_never() {
         .redirect(StatusCode::FOUND, "https://a.test/bar")
         .build();
 
-    let mut flow = scenario
+    let mut call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::Never)
+        .as_new_call(RedirectAuthHeaders::Never)
         .unwrap()
         .unwrap()
         .proceed();
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\
@@ -302,16 +302,16 @@ fn keep_auth_header_same_host() {
         .redirect(StatusCode::FOUND, "https://a.test:234/bar")
         .build();
 
-    let mut flow = scenario
+    let mut call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::SameHost)
+        .as_new_call(RedirectAuthHeaders::SameHost)
         .unwrap()
         .unwrap()
         .proceed();
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\
@@ -329,16 +329,16 @@ fn dont_keep_auth_header_different_host() {
         .redirect(StatusCode::FOUND, "https://b.test/bar")
         .build();
 
-    let mut flow = scenario
+    let mut call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::SameHost)
+        .as_new_call(RedirectAuthHeaders::SameHost)
         .unwrap()
         .unwrap()
         .proceed();
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\
@@ -356,16 +356,16 @@ fn dont_keep_cookie_header() {
         .redirect(StatusCode::FOUND, "https://b.test/bar")
         .build();
 
-    let mut flow = scenario
+    let mut call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::SameHost)
+        .as_new_call(RedirectAuthHeaders::SameHost)
         .unwrap()
         .unwrap()
         .proceed();
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\
@@ -384,16 +384,16 @@ fn dont_keep_content_length() {
         .redirect(StatusCode::FOUND, "https://b.test/bar")
         .build();
 
-    let mut flow = scenario
+    let mut call = scenario
         .to_redirect()
-        .as_new_flow(RedirectAuthHeaders::SameHost)
+        .as_new_call(RedirectAuthHeaders::SameHost)
         .unwrap()
         .unwrap()
         .proceed();
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
 
     let cmp = "\
             GET /bar HTTP/1.1\r\n\

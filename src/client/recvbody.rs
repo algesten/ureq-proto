@@ -2,9 +2,9 @@ use crate::body::BodyReader;
 use crate::{BodyMode, Error};
 
 use super::state::RecvBody;
-use super::{Flow, RecvBodyResult};
+use super::{Call, RecvBodyResult};
 
-impl<B> Flow<B, RecvBody> {
+impl<B> Call<B, RecvBody> {
     /// Read the response body from `input` to `output`.
     ///
     /// Depending on response headers, we can be in `transfer-encoding: chunked` or not. If we are,
@@ -76,9 +76,9 @@ impl<B> Flow<B, RecvBody> {
         }
 
         Some(if self.inner.is_redirect() {
-            RecvBodyResult::Redirect(Flow::wrap(self.inner))
+            RecvBodyResult::Redirect(Call::wrap(self.inner))
         } else {
-            RecvBodyResult::Cleanup(Flow::wrap(self.inner))
+            RecvBodyResult::Cleanup(Call::wrap(self.inner))
         })
     }
 }

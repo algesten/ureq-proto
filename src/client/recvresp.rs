@@ -8,9 +8,9 @@ use crate::Error;
 
 use super::state::RecvResponse;
 use super::MAX_RESPONSE_HEADERS;
-use super::{CloseReason, Flow, RecvResponseResult};
+use super::{Call, CloseReason, RecvResponseResult};
 
-impl<B> Flow<B, RecvResponse> {
+impl<B> Call<B, RecvResponse> {
     /// Try reading a response from the input.
     ///
     /// * `allow_partial_redirect` - if `true`, we can accept to find the `Location` header
@@ -21,7 +21,7 @@ impl<B> Flow<B, RecvResponse> {
     ///
     /// Notice that it's possible that we get an `input amount consumed` despite not returning
     /// a `Some(Response)`. This can happen if the server returned a 100-continue, and due to
-    /// timing reasons we did not receive it while we were in the `Await100` flow state. This
+    /// timing reasons we did not receive it while we were in the `Await100` call state. This
     /// "spurios" 100 will be discarded before we parse the actual response.
     pub fn try_response(
         &mut self,
@@ -176,12 +176,12 @@ impl<B> Flow<B, RecvResponse> {
                     .push(CloseReason::CloseDelimitedBody);
             }
 
-            Some(RecvResponseResult::RecvBody(Flow::wrap(self.inner)))
+            Some(RecvResponseResult::RecvBody(Call::wrap(self.inner)))
         } else {
             Some(if self.inner.is_redirect() {
-                RecvResponseResult::Redirect(Flow::wrap(self.inner))
+                RecvResponseResult::Redirect(Call::wrap(self.inner))
             } else {
-                RecvResponseResult::Cleanup(Flow::wrap(self.inner))
+                RecvResponseResult::Cleanup(Call::wrap(self.inner))
             })
         }
     }

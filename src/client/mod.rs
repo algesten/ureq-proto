@@ -3,8 +3,8 @@
 //! Sans-IO protocol impl, which means "writing" and "reading" are made via buffers
 //! rather than the Write/Read std traits.
 //!
-//! The [`Flow`](flow::Flow) object attempts to encode correct HTTP/1.1 handling using
-//! state variables, for example `Flow<'a, SendRequest>` to represent the
+//! The [`Call`] object attempts to encode correct HTTP/1.1 handling using
+//! state variables, for example `Call<'a, SendRequest>` to represent the
 //! lifecycle stage where we are to send the request.
 //!
 //! The states are:
@@ -69,14 +69,14 @@
 //!
 //! // ********************************** Prepare
 //!
-//! let mut flow = Flow::new(request).unwrap();
+//! let mut call = Call::new(request).unwrap();
 //!
 //! // Prepare with state from cookie jar. The uri
 //! // is used to key the cookies.
-//! let uri = flow.uri();
+//! let uri = call.uri();
 //!
-//! // flow.header("Cookie", "my_cookie1=value1");
-//! // flow.header("Cookie", "my_cookie2=value2");
+//! // call.header("Cookie", "my_cookie1=value1");
+//! // call.header("Cookie", "my_cookie2=value2");
 //!
 //! // Obtain a connection for the uri, either a
 //! // pooled connection from a previous http/1.1
@@ -93,9 +93,9 @@
 //! // ********************************** SendRequest
 //!
 //! // Proceed to the next state writing the request.
-//! let mut flow = flow.proceed();
+//! let mut call = call.proceed();
 //!
-//! let output_used = flow.write(&mut output).unwrap();
+//! let output_used = call.write(&mut output).unwrap();
 //! assert_eq!(output_used, 107);
 //!
 //! assert_eq!(&output[..output_used], b"\
@@ -107,13 +107,13 @@
 //!     \r\n");
 //!
 //! // Check we can continue to send the body
-//! assert!(flow.can_proceed());
+//! assert!(call.can_proceed());
 //!
 //! // ********************************** Await100
 //!
 //! // In this example, we know the next state is Await100.
 //! // A real client needs to match on the variants.
-//! let mut flow = match flow.proceed() {
+//! let mut call = match call.proceed() {
 //!     Ok(Some(SendRequestResult::Await100(v))) => v,
 //!     _ => panic!(),
 //! };
@@ -124,26 +124,26 @@
 //!
 //! // This boolean can be checked whether there's any point
 //! // in keeping waiting for the timer to run out.
-//! assert!(flow.can_keep_await_100());
+//! assert!(call.can_keep_await_100());
 //!
 //! let input = b"HTTP/1.1 100 Continue\r\n\r\n";
-//! let input_used = flow.try_read_100(input).unwrap();
+//! let input_used = call.try_read_100(input).unwrap();
 //!
 //! assert_eq!(input_used, 25);
-//! assert!(!flow.can_keep_await_100());
+//! assert!(!call.can_keep_await_100());
 //!
 //! // ********************************** SendBody
 //!
 //! // Proceeding is possible regardless of whether the
 //! // can_keep_await_100() is true or false.
 //! // A real client needs to match on the variants.
-//! let mut flow = match flow.proceed() {
+//! let mut call = match call.proceed() {
 //!     Ok(Await100Result::SendBody(v)) => v,
 //!     _ => panic!(),
 //! };
 //!
 //! let (input_used, o1) =
-//!     flow.write(b"hello", &mut output).unwrap();
+//!     call.write(b"hello", &mut output).unwrap();
 //!
 //! assert_eq!(input_used, 5);
 //!
@@ -151,9 +151,9 @@
 //! // the end of body must be signaled with
 //! // an empty input. This is also valid for
 //! // regular content-length body.
-//! assert!(!flow.can_proceed());
+//! assert!(!call.can_proceed());
 //!
-//! let (_, o2) = flow.write(&[], &mut output[o1..]).unwrap();
+//! let (_, o2) = call.write(&[], &mut output[o1..]).unwrap();
 //!
 //! let output_used = o1 + o2;
 //! assert_eq!(output_used, 15);
@@ -165,12 +165,12 @@
 //!     0\r\n\
 //!     \r\n");
 //!
-//! assert!(flow.can_proceed());
+//! assert!(call.can_proceed());
 //!
 //! // ********************************** RecvRequest
 //!
 //! // Proceed to read the request.
-//! let mut flow = flow.proceed().unwrap();
+//! let mut call = call.proceed().unwrap();
 //!
 //! let part = b"HTTP/1.1 200 OK\r\nContent-Len";
 //! let full = b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n";
@@ -178,13 +178,13 @@
 //! // try_response can be used repeatedly until we
 //! // get enough content including all headers.
 //! let (input_used, maybe_response) =
-//!     flow.try_response(part, false).unwrap();
+//!     call.try_response(part, false).unwrap();
 //!
 //! assert_eq!(input_used, 0);
 //! assert!(maybe_response.is_none());
 //!
 //! let (input_used, maybe_response) =
-//!     flow.try_response(full, false).unwrap();
+//!     call.try_response(full, false).unwrap();
 //!
 //! assert_eq!(input_used, 38);
 //! let response = maybe_response.unwrap();
@@ -193,13 +193,13 @@
 //!
 //! // It's not possible to proceed until we
 //! // have read a response.
-//! let mut flow = match flow.proceed() {
+//! let mut call = match call.proceed() {
 //!     Some(RecvResponseResult::RecvBody(v)) => v,
 //!     _ => panic!(),
 //! };
 //!
 //! let(input_used, output_used) =
-//!     flow.read(b"hi there!", &mut output).unwrap();
+//!     call.read(b"hi there!", &mut output).unwrap();
 //!
 //! assert_eq!(input_used, 9);
 //! assert_eq!(output_used, 9);
@@ -208,12 +208,12 @@
 //!
 //! // ********************************** Cleanup
 //!
-//! let flow = match flow.proceed() {
+//! let call = match call.proceed() {
 //!     Some(RecvBodyResult::Cleanup(v)) => v,
 //!     _ => panic!(),
 //! };
 //!
-//! if flow.must_close_connection() {
+//! if call.must_close_connection() {
 //!     // connection.close();
 //! } else {
 //!     // connection.return_to_pool();
@@ -250,8 +250,6 @@ use crate::util::ArrayVec;
 
 use amended::AmendedRequest;
 
-pub mod flow;
-
 mod amended;
 
 // mod holder;
@@ -262,16 +260,16 @@ mod test;
 /// Max number of headers to parse from an HTTP response
 pub const MAX_RESPONSE_HEADERS: usize = 128;
 
-/// State types for the Flow state machine.
+/// State types for the Call state machine.
 ///
-/// These types are used as type parameters to `Flow<B, State>` to represent
-/// the current state of the HTTP request/response flow.
+/// These types are used as type parameters to `Call<B, State>` to represent
+/// the current state of the HTTP request/response state machine.
 pub mod state {
     pub(crate) trait Named {
         fn name() -> &'static str;
     }
 
-    macro_rules! flow_state {
+    macro_rules! call_state {
         ($n:tt) => {
             #[doc(hidden)]
             pub struct $n(());
@@ -283,36 +281,36 @@ pub mod state {
         };
     }
 
-    flow_state!(Prepare);
-    flow_state!(SendRequest);
-    flow_state!(Await100);
-    flow_state!(SendBody);
-    flow_state!(RecvResponse);
-    flow_state!(RecvBody);
-    flow_state!(Redirect);
-    flow_state!(Cleanup);
+    call_state!(Prepare);
+    call_state!(SendRequest);
+    call_state!(Await100);
+    call_state!(SendBody);
+    call_state!(RecvResponse);
+    call_state!(RecvBody);
+    call_state!(Redirect);
+    call_state!(Cleanup);
 }
 use self::state::*;
 
-/// A flow of states for an HTTP request/response cycle.
+/// A state machine for an HTTP request/response cycle.
 ///
-/// This is the main type of the Flow module, representing a state machine that
-/// transitions through various states during the lifecycle of an HTTP request/response.
+/// This type represents a state machine that transitions through various
+/// states during the lifecycle of an HTTP request/response.
 ///
 /// The type parameters are:
 /// - `B`: The type of the request body
-/// - `State`: The current state of the flow (e.g., `Prepare`, `SendRequest`, etc.)
+/// - `State`: The current state of the state machine (e.g., `Prepare`, `SendRequest`, etc.)
 ///
 /// See the [state graph][crate::client] in the client module documentation for a
 /// visual representation of the state transitions.
-pub struct Flow<B, State> {
+pub struct Call<B, State> {
     inner: Inner<B>,
     _ph: PhantomData<State>,
 }
 
-/// Internal state of a Flow.
+/// Internal state of a Call.
 ///
-/// This struct contains the actual state data for a Flow, independent of the
+/// This struct contains the actual state data for a Call, independent of the
 /// state type parameter. It's exposed as pub(crate) to allow tests to inspect
 /// the state.
 #[derive(Debug)]
@@ -434,12 +432,12 @@ impl CloseReason {
     }
 }
 
-impl<B, S> Flow<B, S> {
-    fn wrap(inner: Inner<B>) -> Flow<B, S>
+impl<B, S> Call<B, S> {
+    fn wrap(inner: Inner<B>) -> Call<B, S>
     where
         S: Named,
     {
-        let wrapped = Flow {
+        let wrapped = Call {
             inner,
             _ph: PhantomData,
         };
@@ -465,7 +463,7 @@ mod sendreq;
 
 /// Possible state transitions after sending a request.
 ///
-/// After sending the request headers, the flow can transition to one of three states:
+/// After sending the request headers, the call can transition to one of three states:
 /// - `Await100`: If the request included an `Expect: 100-continue` header
 /// - `SendBody`: If the request has a body to send
 /// - `RecvResponse`: If the request has no body (e.g., GET, HEAD)
@@ -473,13 +471,13 @@ mod sendreq;
 /// See the [state graph][crate::client] for a visual representation.
 pub enum SendRequestResult<B> {
     /// Expect-100/Continue mechanic.
-    Await100(Flow<B, Await100>),
+    Await100(Call<B, Await100>),
 
     /// Send the request body.
-    SendBody(Flow<B, SendBody>),
+    SendBody(Call<B, SendBody>),
 
     /// Receive the response.
-    RecvResponse(Flow<B, RecvResponse>),
+    RecvResponse(Call<B, RecvResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// AWAIT 100
@@ -488,17 +486,17 @@ mod await100;
 
 /// Possible state transitions after awaiting a 100 Continue response.
 ///
-/// After awaiting a 100 Continue response, the flow can transition to one of two states:
+/// After awaiting a 100 Continue response, the call can transition to one of two states:
 /// - `SendBody`: If the server sent a 100 Continue response or the timeout expired
 /// - `RecvResponse`: If the server sent a different response
 ///
 /// See the [state graph][crate::client] for a visual representation.
 pub enum Await100Result<B> {
     /// Send the request body.
-    SendBody(Flow<B, SendBody>),
+    SendBody(Call<B, SendBody>),
 
     /// Receive server response.
-    RecvResponse(Flow<B, RecvResponse>),
+    RecvResponse(Call<B, RecvResponse>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// SEND BODY
@@ -511,7 +509,7 @@ mod recvresp;
 
 /// Possible state transitions after receiving a response.
 ///
-/// After receiving a response (status and headers), the flow can transition to one of three states:
+/// After receiving a response (status and headers), the call can transition to one of three states:
 /// - `RecvBody`: If the response has a body to receive
 /// - `Redirect`: If the response is a redirect
 /// - `Cleanup`: If the response has no body and is not a redirect
@@ -519,13 +517,13 @@ mod recvresp;
 /// See the [state graph][crate::client] for a visual representation.
 pub enum RecvResponseResult<B> {
     /// Receive a response body.
-    RecvBody(Flow<B, RecvBody>),
+    RecvBody(Call<B, RecvBody>),
 
     /// Follow a redirect.
-    Redirect(Flow<B, Redirect>),
+    Redirect(Call<B, Redirect>),
 
     /// Run cleanup.
-    Cleanup(Flow<B, Cleanup>),
+    Cleanup(Call<B, Cleanup>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// RECV BODY
@@ -534,17 +532,17 @@ mod recvbody;
 
 /// Possible state transitions after receiving a response body.
 ///
-/// After receiving a response body, the flow can transition to one of two states:
+/// After receiving a response body, the call can transition to one of two states:
 /// - `Redirect`: If the response is a redirect
 /// - `Cleanup`: If the response is not a redirect
 ///
 /// See the [state graph][crate::client] for a visual representation.
 pub enum RecvBodyResult<B> {
     /// Follow a redirect
-    Redirect(Flow<B, Redirect>),
+    Redirect(Call<B, Redirect>),
 
     /// Go to cleanup
-    Cleanup(Flow<B, Cleanup>),
+    Cleanup(Call<B, Cleanup>),
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////// REDIRECT
@@ -573,7 +571,7 @@ pub enum RedirectAuthHeaders {
 
 // //////////////////////////////////////////////////////////////////////////////////////////// CLEANUP
 
-impl<B> Flow<B, Cleanup> {
+impl<B> Call<B, Cleanup> {
     /// Tell if we must close the connection.
     pub fn must_close_connection(&self) -> bool {
         self.close_reason().is_some()
@@ -587,9 +585,9 @@ impl<B> Flow<B, Cleanup> {
 
 // ////////////////////////////////////////////////////////////////////////////////////////////
 
-impl<B, State: Named> fmt::Debug for Flow<B, State> {
+impl<B, State: Named> fmt::Debug for Call<B, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Flow<{}>", State::name())
+        write!(f, "Call<{}>", State::name())
     }
 }
 
@@ -616,12 +614,12 @@ mod tests {
     #[test]
     fn head_simple() {
         let req = Request::head("http://foo.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
         let s = str::from_utf8(&output[..n]).unwrap();
 
         assert_eq!(s, "HEAD /page HTTP/1.1\r\nhost: foo.test\r\n\r\n");
@@ -630,21 +628,21 @@ mod tests {
     #[test]
     fn head_without_body() {
         let req = Request::head("http://foo.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
-        flow.write(&mut output).unwrap();
+        call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to the next state
-        let next_flow = flow.proceed().unwrap().unwrap();
+        let call = call.proceed().unwrap().unwrap();
 
         // For a HEAD request, we should get a RecvResponse result
-        let SendRequestResult::RecvResponse(_) = next_flow else {
+        let SendRequestResult::RecvResponse(_) = call else {
             panic!("Expected RecvResponse")
         };
     }
@@ -652,32 +650,32 @@ mod tests {
     #[test]
     fn head_with_body_despite_method() {
         let req = Request::head("http://foo.test/page").body(()).unwrap();
-        let mut flow = Flow::new(req).unwrap();
+        let mut call = Call::new(req).unwrap();
 
         // Force sending a body despite the method
-        flow.send_body_despite_method();
+        call.send_body_despite_method();
 
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
-        flow.write(&mut output).unwrap();
+        call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to the next state
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         // Write an empty body
-        let (i, n) = flow.write(&[], &mut output).unwrap();
+        let (i, n) = call.write(&[], &mut output).unwrap();
         assert_eq!(i, 0);
         assert_eq!(n, 5); // "0\r\n\r\n" for chunked encoding
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
     }
 
     #[test]
@@ -686,26 +684,26 @@ mod tests {
             .header("content-length", 5)
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n1 = flow.write(&mut output).unwrap();
+        let n1 = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to the next state
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         // Write the body
-        let (i1, n2) = flow.write(b"hallo", &mut output[n1..]).unwrap();
+        let (i1, n2) = call.write(b"hallo", &mut output[n1..]).unwrap();
         assert_eq!(i1, 5);
 
         let s = str::from_utf8(&output[..n1 + n2]).unwrap();
@@ -721,52 +719,52 @@ mod tests {
             .header("content-length", 5)
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
         let body = b"hallo";
 
         // Write the request headers in multiple steps with small output buffers
         {
-            let n = flow.write(&mut output[..25]).unwrap();
+            let n = call.write(&mut output[..25]).unwrap();
             let s = str::from_utf8(&output[..n]).unwrap();
             assert_eq!(s, "POST /page HTTP/1.1\r\n");
-            assert!(!flow.can_proceed());
+            assert!(!call.can_proceed());
         }
 
         {
-            let n = flow.write(&mut output[..20]).unwrap();
+            let n = call.write(&mut output[..20]).unwrap();
             let s = str::from_utf8(&output[..n]).unwrap();
             assert_eq!(s, "host: f.test\r\n");
-            assert!(!flow.can_proceed());
+            assert!(!call.can_proceed());
         }
 
         {
-            let n = flow.write(&mut output[..21]).unwrap();
+            let n = call.write(&mut output[..21]).unwrap();
             let s = str::from_utf8(&output[..n]).unwrap();
             assert_eq!(s, "content-length: 5\r\n\r\n");
-            assert!(flow.can_proceed());
+            assert!(call.can_proceed());
         }
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         // Write the body
         {
-            let (i, n) = flow.write(body, &mut output[..25]).unwrap();
+            let (i, n) = call.write(body, &mut output[..25]).unwrap();
             assert_eq!(n, 5);
             assert_eq!(i, 5);
             let s = str::from_utf8(&output[..n]).unwrap();
             assert_eq!(s, "hallo");
 
             // Check if we can proceed (body is fully sent)
-            assert!(flow.can_proceed());
+            assert!(call.can_proceed());
         }
     }
 
@@ -776,36 +774,36 @@ mod tests {
             .header("content-length", 2)
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n1 = flow.write(&mut output).unwrap();
+        let n1 = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         // Write the body (first write should fail because it's larger than content-length)
         let body = b"hallo";
-        let r = flow.write(body, &mut output[n1..]);
+        let r = call.write(body, &mut output[n1..]);
         assert_eq!(r.unwrap_err(), Error::BodyLargerThanContentLength);
 
         // Write a smaller body that fits within content-length
         let body = b"ha";
-        let r = flow.write(body, &mut output[n1..]);
+        let r = call.write(body, &mut output[n1..]);
         assert!(r.is_ok());
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
     }
 
     #[test]
@@ -814,30 +812,30 @@ mod tests {
             .header("content-length", 5)
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n1 = flow.write(&mut output).unwrap();
+        let n1 = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         // Write the first part of the body
-        let (i1, n2) = flow.write(b"ha", &mut output[n1..]).unwrap();
+        let (i1, n2) = call.write(b"ha", &mut output[n1..]).unwrap();
         assert_eq!(i1, 2);
 
         // Write the second part of the body
-        let (i2, n3) = flow.write(b"ha", &mut output[n1 + n2..]).unwrap();
+        let (i2, n3) = call.write(b"ha", &mut output[n1 + n2..]).unwrap();
         assert_eq!(i2, 2);
 
         let s = str::from_utf8(&output[..n1 + n2 + n3]).unwrap();
@@ -847,14 +845,14 @@ mod tests {
         );
 
         // Check if we can proceed (body is not fully sent yet)
-        assert!(!flow.can_proceed());
+        assert!(!call.can_proceed());
 
         // Write the third part of the body (should fail because it's larger than remaining content length)
-        let err = flow.write(b"llo", &mut output[n1 + n2 + n3..]).unwrap_err();
+        let err = call.write(b"llo", &mut output[n1 + n2 + n3..]).unwrap_err();
         assert_eq!(err, Error::BodyLargerThanContentLength);
 
         // Write the last byte to complete the content length
-        let (i3, n4) = flow.write(b"l", &mut output[n1 + n2 + n3..]).unwrap();
+        let (i3, n4) = call.write(b"l", &mut output[n1 + n2 + n3..]).unwrap();
         assert_eq!(i3, 1);
 
         let s = str::from_utf8(&output[..n1 + n2 + n3 + n4]).unwrap();
@@ -864,7 +862,7 @@ mod tests {
         );
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
     }
 
     #[test]
@@ -873,36 +871,36 @@ mod tests {
             .header("transfer-encoding", "chunked")
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n1 = flow.write(&mut output).unwrap();
+        let n1 = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody")
         };
 
         let body = b"hallo";
 
         // Write the first chunk of the body
-        let (i1, n2) = flow.write(body, &mut output[n1..]).unwrap();
+        let (i1, n2) = call.write(body, &mut output[n1..]).unwrap();
         assert_eq!(i1, 5);
 
         // Write the second chunk of the body
-        let (i2, n3) = flow.write(body, &mut output[n1 + n2..]).unwrap();
+        let (i2, n3) = call.write(body, &mut output[n1 + n2..]).unwrap();
         assert_eq!(i2, 5);
 
         // Indicate the end of the body
-        let (i3, n4) = flow.write(&[], &mut output[n1 + n2 + n3..]).unwrap();
+        let (i3, n4) = call.write(&[], &mut output[n1 + n2 + n3..]).unwrap();
         assert_eq!(i3, 0);
 
         let s = str::from_utf8(&output[..n1 + n2 + n3 + n4]).unwrap();
@@ -912,72 +910,72 @@ mod tests {
         );
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
     }
 
     #[test]
     fn post_without_body() {
         let req = Request::post("http://foo.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        flow.write(&mut output).unwrap();
+        call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to the next state
-        let next_flow = flow.proceed().unwrap().unwrap();
+        let call = call.proceed().unwrap().unwrap();
 
         // For a POST request, we should get a SendBody result
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody");
         };
 
         // Check that we can't proceed without writing a body
-        assert!(!flow.can_proceed());
+        assert!(!call.can_proceed());
 
         // Write an empty body
-        let (i, n) = flow.write(&[], &mut output).unwrap();
+        let (i, n) = call.write(&[], &mut output).unwrap();
         assert_eq!(i, 0);
         assert_eq!(n, 5); // "0\r\n\r\n" for chunked encoding
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
     }
 
     #[test]
     fn post_streaming() {
         let req = Request::post("http://f.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n1 = flow.write(&mut output).unwrap();
+        let n1 = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody");
         };
 
         // Write the first chunk of the body (using i2, n2 to match original test)
-        let (i2, n2) = flow.write(b"hallo", &mut output[n1..]).unwrap();
+        let (i2, n2) = call.write(b"hallo", &mut output[n1..]).unwrap();
 
         // Send end (using i3, n3 to match original test)
-        let (i3, n3) = flow.write(&[], &mut output[n1 + n2..]).unwrap();
+        let (i3, n3) = call.write(&[], &mut output[n1 + n2..]).unwrap();
 
-        // Use i1 = 0 to match original test (in Flow API, i1 is not used for headers)
+        // Use i1 = 0 to match original test (in Call API, i1 is not used for headers)
         let i1 = 0;
 
         // Verify the results with the same assertions as the original test
@@ -1002,36 +1000,36 @@ mod tests {
             .header("content-length", "5")
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let headers_n = flow.write(&mut output).unwrap();
+        let headers_n = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody");
         };
 
         // Write the body (first call)
-        let (i1, n1) = flow.write(b"hallo", &mut output[headers_n..]).unwrap();
+        let (i1, n1) = call.write(b"hallo", &mut output[headers_n..]).unwrap();
 
         // Verify the results
-        assert_eq!(i1, 5); // In Flow API, i1 is the number of bytes consumed from the input
-        assert_eq!(n1, 5); // In Flow API, n1 is the number of bytes written to the output
+        assert_eq!(i1, 5); // In Call API, i1 is the number of bytes consumed from the input
+        assert_eq!(n1, 5); // In Call API, n1 is the number of bytes written to the output
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Try to write more data after the body is fully sent (should fail)
-        let err = flow
+        let err = call
             .write(b"hallo", &mut output[headers_n + n1..])
             .unwrap_err();
         assert_eq!(err, Error::BodyContentAfterFinish);
@@ -1047,32 +1045,32 @@ mod tests {
     #[test]
     fn post_streaming_after_end() {
         let req = Request::post("http://f.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let headers_n = flow.write(&mut output).unwrap();
+        let headers_n = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody");
         };
 
         // Write the body
-        let (_, n1) = flow.write(b"hallo", &mut output[headers_n..]).unwrap();
+        let (_, n1) = call.write(b"hallo", &mut output[headers_n..]).unwrap();
 
         // Send end
-        let (_, n2) = flow.write(&[], &mut output[headers_n + n1..]).unwrap();
+        let (_, n2) = call.write(&[], &mut output[headers_n + n1..]).unwrap();
 
         // Try to write after end
-        let err = flow.write(b"after end", &mut output[headers_n + n1 + n2..]);
+        let err = call.write(b"after end", &mut output[headers_n + n1 + n2..]);
 
         assert_eq!(err, Err(Error::BodyContentAfterFinish));
     }
@@ -1083,36 +1081,36 @@ mod tests {
             .header("content-length", "5")
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let headers_n = flow.write(&mut output).unwrap();
+        let headers_n = call.write(&mut output).unwrap();
 
         // Check if we can proceed
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(mut flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(mut call) = call else {
             panic!("Expected SendBody");
         };
 
         // Write the body (first call)
-        let (i1, n1) = flow.write(b"hallo", &mut output[headers_n..]).unwrap();
+        let (i1, n1) = call.write(b"hallo", &mut output[headers_n..]).unwrap();
 
         // Verify the results
-        assert_eq!(i1, 5); // In Flow API, i1 is the number of bytes consumed from the input
-        assert_eq!(n1, 5); // In Flow API, n1 is the number of bytes written to the output
+        assert_eq!(i1, 5); // In Call API, i1 is the number of bytes consumed from the input
+        assert_eq!(n1, 5); // In Call API, n1 is the number of bytes written to the output
 
         // Check if we can proceed (body is fully sent)
-        assert!(flow.can_proceed());
+        assert!(call.can_proceed());
 
         // Try to write more data after the body is fully sent (should fail with BodyContentAfterFinish)
-        let err = flow
+        let err = call
             .write(b"hallo", &mut output[headers_n + n1..])
             .unwrap_err();
         assert_eq!(err, Error::BodyContentAfterFinish);
@@ -1130,14 +1128,14 @@ mod tests {
         let req = Request::get("http://martin:secret@f.test/page")
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1151,14 +1149,14 @@ mod tests {
     #[test]
     fn username_uri() {
         let req = Request::get("http://martin@f.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1172,14 +1170,14 @@ mod tests {
     #[test]
     fn password_uri() {
         let req = Request::get("http://:secret@f.test/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1197,14 +1195,14 @@ mod tests {
             .header("authorization", "meh meh meh")
             .body(())
             .unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1218,14 +1216,14 @@ mod tests {
     #[test]
     fn non_standard_port() {
         let req = Request::get("http://f.test:8080/page").body(()).unwrap();
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1242,14 +1240,14 @@ mod tests {
             .body(())
             .unwrap();
 
-        let flow = Flow::new(req).unwrap();
+        let call = Call::new(req).unwrap();
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Try to write the request headers
         let mut output = vec![0; 1024];
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         assert_eq!(err, Error::MethodVersionMismatch(m, Version::HTTP_11));
     }
@@ -1264,17 +1262,17 @@ mod tests {
             .body(())
             .unwrap();
 
-        let mut flow = Flow::new(req).unwrap();
+        let mut call = Call::new(req).unwrap();
 
         // Allow non-standard methods
-        flow.allow_non_standard_methods(true);
+        call.allow_non_standard_methods(true);
 
         // Proceed to SendRequest
-        let mut flow = flow.proceed();
+        let mut call = call.proceed();
 
         // Write the request headers
         let mut output = vec![0; 1024];
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         let s = str::from_utf8(&output[..n]).unwrap();
 
@@ -1299,6 +1297,6 @@ mod tests {
         ensure!(http::Request<()>, 300); // 224
         ensure!(AmendedRequest<()>, 400); // 368
         ensure!(Inner<()>, 600); // 512
-        ensure!(Flow<(), SendRequest>, 600); // 512
+        ensure!(Call<(), SendRequest>, 600); // 512
     }
 }

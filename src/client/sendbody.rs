@@ -3,9 +3,9 @@ use crate::util::Writer;
 use crate::Error;
 
 use super::state::{RecvResponse, SendBody};
-use super::Flow;
+use super::Call;
 
-impl<B> Flow<B, SendBody> {
+impl<B> Call<B, SendBody> {
     /// Write request body from `input` to `output`.
     ///
     /// This is called repeatedly until the entire body has been sent. The output buffer is filled
@@ -94,11 +94,11 @@ impl<B> Flow<B, SendBody> {
     ///
     /// Returns `None` if it's not possible to proceed. It's guaranteed that if `can_proceed()` returns
     /// `true`, this will result in `Some`.
-    pub fn proceed(self) -> Option<Flow<B, RecvResponse>> {
+    pub fn proceed(self) -> Option<Call<B, RecvResponse>> {
         if !self.can_proceed() {
             return None;
         }
 
-        Some(Flow::wrap(self.inner))
+        Some(Call::wrap(self.inner))
     }
 }

@@ -1,15 +1,15 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use ureq_proto::client::flow::{
-    Await100Result, Flow, RecvBodyResult, RecvResponseResult, SendRequestResult,
+use ureq_proto::client::{
+    Await100Result, Call, RecvBodyResult, RecvResponseResult, SendRequestResult,
 };
 use ureq_proto::http::{Method, Request, Version};
 
 // List of HTTP methods to randomly choose from
 const METHODS: &[&str] = &["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"];
 
-// List of relevant request headers that drive the Flow API logic
+// List of relevant request headers that drive the Call API logic
 const RELEVANT_REQUEST_HEADERS: &[(&str, &[&str])] = &[
     // Header name, possible values
     ("content-length", &["10", "100", "1000"]),
@@ -20,7 +20,7 @@ const RELEVANT_REQUEST_HEADERS: &[(&str, &[&str])] = &[
     ("authorization", &["Basic dXNlcjpwYXNz", "Bearer token123"]),
 ];
 
-// List of relevant response headers that drive the Flow API logic
+// List of relevant response headers that drive the Call API logic
 const RELEVANT_RESPONSE_HEADERS: &[(&str, &[&str])] = &[
     // Header name, possible values
     ("content-length", &["5", "10", "100"]),
@@ -90,55 +90,55 @@ fuzz_target!(|data: &[u8]| {
         Err(_) => return, // Skip invalid requests
     };
 
-    // Create a Flow from the request
-    let flow = match Flow::new(request) {
-        Ok(flow) => flow,
-        Err(_) => return, // Skip if Flow creation fails
+    // Create a Call from the request
+    let call = match Call::new(request) {
+        Ok(call) => call,
+        Err(_) => return, // Skip if Call creation fails
     };
 
     // Proceed to SendRequest state
-    let mut flow = flow.proceed();
+    let mut call = call.proceed();
 
     // Create a buffer for writing the request
     let mut output = vec![0u8; 4096];
 
     // Write the request headers
-    match flow.write(&mut output) {
+    match call.write(&mut output) {
         Ok(_) => {}
         Err(_) => return, // Skip if writing fails
     }
 
     // Check if we can proceed
-    if !flow.can_proceed() {
+    if !call.can_proceed() {
         return; // Skip if we can't proceed
     }
 
     // Proceed to the next state
-    let next_flow = match flow.proceed() {
+    let next_call = match call.proceed() {
         Ok(Some(next)) => next,
         _ => return, // Skip if proceeding fails
     };
 
     // Handle the different possible next states
-    match next_flow {
-        SendRequestResult::Await100(flow) => {
+    match next_call {
+        SendRequestResult::Await100(call) => {
             // Simulate a 100 Continue response
-            handle_await_100(flow, &mut output, data);
+            handle_await_100(call, &mut output, data);
         }
-        SendRequestResult::SendBody(flow) => {
+        SendRequestResult::SendBody(call) => {
             // Send a body
-            handle_send_body(flow, &mut output, data);
+            handle_send_body(call, &mut output, data);
         }
-        SendRequestResult::RecvResponse(flow) => {
+        SendRequestResult::RecvResponse(call) => {
             // Simulate a response
-            handle_recv_response(flow, &mut output, data);
+            handle_recv_response(call, &mut output, data);
         }
     }
 });
 
 // Helper function to handle the Await100 state with randomized responses
 fn handle_await_100<B>(
-    mut flow: Flow<B, ureq_proto::client::flow::state::Await100>,
+    mut call: Call<B, ureq_proto::client::state::Await100>,
     output: &mut [u8],
     data: &[u8],
 ) {
@@ -165,21 +165,21 @@ fn handle_await_100<B>(
         response.push_str("\r\n");
 
         // Try to read the 100 Continue response
-        match flow.try_read_100(response.as_bytes()) {
+        match call.try_read_100(response.as_bytes()) {
             Ok(_) => {}
             Err(_) => return, // Skip if reading fails
         }
     }
 
     // Proceed to the next state
-    match flow.proceed() {
-        Ok(Await100Result::SendBody(flow)) => {
+    match call.proceed() {
+        Ok(Await100Result::SendBody(call)) => {
             // Handle the send body state
-            handle_send_body(flow, output, data);
+            handle_send_body(call, output, data);
         }
-        Ok(Await100Result::RecvResponse(flow)) => {
+        Ok(Await100Result::RecvResponse(call)) => {
             // Handle the response directly
-            handle_recv_response(flow, output, data);
+            handle_recv_response(call, output, data);
         }
         Err(_) => return, // Skip if proceeding fails
     }
@@ -187,7 +187,7 @@ fn handle_await_100<B>(
 
 // Helper function to handle the SendBody state
 fn handle_send_body<B>(
-    mut flow: Flow<B, ureq_proto::client::flow::state::SendBody>,
+    mut call: Call<B, ureq_proto::client::state::SendBody>,
     output: &mut [u8],
     data: &[u8],
 ) {
@@ -199,27 +199,27 @@ fn handle_send_body<B>(
     };
 
     // Write the body
-    match flow.write(body_data, output) {
+    match call.write(body_data, output) {
         Ok(_) => {}
         Err(_) => return, // Skip if writing fails
     }
 
     // Write an empty chunk to signal the end of the body
-    match flow.write(&[], &mut output[body_data.len()..]) {
+    match call.write(&[], &mut output[body_data.len()..]) {
         Ok(_) => {}
         Err(_) => return, // Skip if writing fails
     }
 
     // Check if we can proceed
-    if !flow.can_proceed() {
+    if !call.can_proceed() {
         return; // Skip if we can't proceed
     }
 
     // Proceed to RecvResponse
-    match flow.proceed() {
-        Some(flow) => {
+    match call.proceed() {
+        Some(call) => {
             // Handle the response
-            handle_recv_response(flow, output, data);
+            handle_recv_response(call, output, data);
         }
         None => return, // Skip if proceeding fails
     }
@@ -227,7 +227,7 @@ fn handle_send_body<B>(
 
 // Helper function to handle the RecvResponse state with randomized responses
 fn handle_recv_response<B>(
-    mut flow: Flow<B, ureq_proto::client::flow::state::RecvResponse>,
+    mut call: Call<B, ureq_proto::client::state::RecvResponse>,
     output: &mut [u8],
     data: &[u8],
 ) {
@@ -273,20 +273,20 @@ fn handle_recv_response<B>(
     response.push_str("\r\n");
 
     // Try to parse the response
-    match flow.try_response(response.as_bytes(), false) {
+    match call.try_response(response.as_bytes(), false) {
         Ok(_) => {}
         Err(_) => return, // Skip if parsing fails
     }
 
     // Proceed to the next state
-    let next_flow = match flow.proceed() {
+    let next_call = match call.proceed() {
         Some(next) => next,
         None => return, // Skip if proceeding fails
     };
 
     // Handle the different possible next states
-    match next_flow {
-        RecvResponseResult::RecvBody(mut flow) => {
+    match next_call {
+        RecvResponseResult::RecvBody(mut call) => {
             // Create a response body as a Vec<u8> to avoid type mismatches
             let body = if response.contains("content-length: 5")
                 || response.contains("Content-Length: 5")
@@ -298,14 +298,14 @@ fn handle_recv_response<B>(
             };
 
             // Read the response body
-            match flow.read(&body, output) {
+            match call.read(&body, output) {
                 Ok(_) => {}
                 Err(_) => return, // Skip if reading fails
             }
 
             // Proceed to the next state
-            let next_flow = match flow.proceed() {
-                Some(RecvBodyResult::Cleanup(flow)) => flow,
+            let next_call = match call.proceed() {
+                Some(RecvBodyResult::Cleanup(call)) => call,
                 Some(RecvBodyResult::Redirect(_)) => {
                     // We don't want to follow redirects, so we're done
                     return;
@@ -314,16 +314,16 @@ fn handle_recv_response<B>(
             };
 
             // Check if we need to close the connection
-            let _must_close = next_flow.must_close_connection();
+            let _must_close = next_call.must_close_connection();
             // In a real client, we would close the connection if must_close is true
         }
         RecvResponseResult::Redirect(_) => {
             // We don't want to follow redirects, so we're done
             return;
         }
-        RecvResponseResult::Cleanup(flow) => {
+        RecvResponseResult::Cleanup(call) => {
             // Check if we need to close the connection
-            let _must_close = flow.must_close_connection();
+            let _must_close = call.must_close_connection();
             // In a real client, we would close the connection if must_close is true
         }
     }

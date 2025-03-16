@@ -75,66 +75,66 @@ mod tests {
     use super::*;
     use crate::client::{
         state::{RecvResponse, Redirect, SendBody, SendRequest},
-        Flow, RecvResponseResult, RedirectAuthHeaders, SendRequestResult,
+        Call, RecvResponseResult, RedirectAuthHeaders, SendRequestResult,
     };
     use http::{HeaderValue, Method, Request, Version};
 
     // Helper methods to reduce test verbosity
 
-    /// Creates a Flow object from a request and proceeds to the initial state
-    fn setup_flow(req: Request<()>) -> (Flow<(), SendRequest>, Vec<u8>) {
-        let flow = Flow::new(req).unwrap();
-        let flow = flow.proceed();
+    /// Creates a Call object from a request and proceeds to the initial state
+    fn setup_call(req: Request<()>) -> (Call<(), SendRequest>, Vec<u8>) {
+        let call = Call::new(req).unwrap();
+        let call = call.proceed();
         let output = vec![0; 1024];
-        (flow, output)
+        (call, output)
     }
 
-    /// Creates a Flow object and proceeds to the RecvResponse state
-    fn setup_recv_response_flow() -> (Flow<(), RecvResponse>, Vec<u8>) {
+    /// Creates a Call object and proceeds to the RecvResponse state
+    fn setup_recv_response_call() -> (Call<(), RecvResponse>, Vec<u8>) {
         let req = Request::get("http://example.com").body(()).unwrap();
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Write the request headers
-        flow.write(&mut output).unwrap();
+        call.write(&mut output).unwrap();
 
         // Proceed to RecvResponse
-        let flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::RecvResponse(flow) = flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::RecvResponse(call) = call else {
             panic!("Expected SendRequestResult::RecvResponse");
         };
 
-        (flow, output)
+        (call, output)
     }
 
-    /// Creates a Flow object and proceeds to the SendBody state
-    fn setup_send_body_flow(req: Request<()>) -> (Flow<(), SendBody>, Vec<u8>, usize) {
-        let (mut flow, mut output) = setup_flow(req);
+    /// Creates a Call object and proceeds to the SendBody state
+    fn setup_send_body_call(req: Request<()>) -> (Call<(), SendBody>, Vec<u8>, usize) {
+        let (mut call, mut output) = setup_call(req);
 
         // Write the request headers
-        let n = flow.write(&mut output).unwrap();
+        let n = call.write(&mut output).unwrap();
 
         // Proceed to SendBody
-        let next_flow = flow.proceed().unwrap().unwrap();
-        let SendRequestResult::SendBody(flow) = next_flow else {
+        let call = call.proceed().unwrap().unwrap();
+        let SendRequestResult::SendBody(call) = call else {
             panic!("Expected SendBody");
         };
 
-        (flow, output, n)
+        (call, output, n)
     }
 
-    /// Creates a Flow object and proceeds to the Redirect state with the given response
-    fn setup_redirect_flow(response: &[u8]) -> Result<(Flow<(), Redirect>, Vec<u8>), Error> {
-        let (mut flow, output) = setup_recv_response_flow();
+    /// Creates a Call object and proceeds to the Redirect state with the given response
+    fn setup_redirect_call(response: &[u8]) -> Result<(Call<(), Redirect>, Vec<u8>), Error> {
+        let (mut call, output) = setup_recv_response_call();
 
         // Try to parse the response
-        let (_, _) = flow.try_response(response, false)?;
+        let (_, _) = call.try_response(response, false)?;
 
         // Proceed to Redirect state
-        let RecvResponseResult::Redirect(flow) = flow.proceed().unwrap() else {
+        let RecvResponseResult::Redirect(call) = call.proceed().unwrap() else {
             panic!("Expected RecvResponseResult::Redirect");
         };
 
-        Ok((flow, output))
+        Ok((call, output))
     }
 
     // BadHeader
@@ -142,10 +142,10 @@ mod tests {
     fn test_bad_header() {
         // Create a request
         let req = Request::get("http://example.com").body(()).unwrap();
-        let mut flow = Flow::new(req).unwrap();
+        let mut call = Call::new(req).unwrap();
 
-        // Try to set an invalid header using the Flow API
-        let result = flow.header("Invalid\0Header", "value");
+        // Try to set an invalid header using the Call API
+        let result = call.header("Invalid\0Header", "value");
 
         // Verify that it returns a BadHeader error
         assert!(result.is_err());
@@ -156,17 +156,17 @@ mod tests {
     // UnsupportedVersion
     #[test]
     fn test_unsupported_version() {
-        // Create a request with HTTP/2.0 which is not supported by the Flow API
+        // Create a request with HTTP/2.0 which is not supported by the Call API
         let req = Request::builder()
             .uri("http://example.com")
             .version(Version::HTTP_2)
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         assert!(matches!(err, Error::UnsupportedVersion));
     }
@@ -183,10 +183,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         assert!(matches!(err, Error::MethodVersionMismatch(_, _)));
         if let Error::MethodVersionMismatch(method, version) = err {
@@ -206,10 +206,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         // Verify that it returns a TooManyHostHeaders error
         assert!(matches!(err, Error::TooManyHostHeaders));
@@ -226,10 +226,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         // Verify that it returns a TooManyContentLengthHeaders error
         assert!(matches!(err, Error::TooManyContentLengthHeaders));
@@ -245,10 +245,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         // Verify that it returns a BadHostHeader error
         assert!(matches!(err, Error::BadHostHeader));
@@ -267,10 +267,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         // Verify that it returns a BadAuthorizationHeader error
         assert!(matches!(err, Error::BadAuthorizationHeader));
@@ -286,10 +286,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output) = setup_flow(req);
+        let (mut call, mut output) = setup_call(req);
 
         // Try to write the request headers
-        let err = flow.write(&mut output).unwrap_err();
+        let err = call.write(&mut output).unwrap_err();
 
         // Verify that it returns a BadContentLengthHeader error
         assert!(matches!(err, Error::BadContentLengthHeader));
@@ -305,30 +305,30 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, _) = setup_flow(req);
+        let (mut call, _) = setup_call(req);
 
         // Try to write to a very small output buffer
         let mut tiny_output = vec![0; 10];
-        let err = flow.write(&mut tiny_output).unwrap_err();
+        let err = call.write(&mut tiny_output).unwrap_err();
 
         assert!(matches!(err, Error::OutputOverflow));
     }
 
     /// Tests a chunked encoding error with the given chunk data
     fn test_chunk_error(chunk_data: &[u8]) -> Error {
-        let (mut flow, mut output) = setup_recv_response_flow();
+        let (mut call, mut output) = setup_recv_response_call();
 
         const RES_PREFIX: &[u8] = b"HTTP/1.1 200 OK\r\n\
                 Transfer-Encoding: chunked\r\n\
                 \r\n";
 
-        flow.try_response(RES_PREFIX, false).unwrap();
+        call.try_response(RES_PREFIX, false).unwrap();
 
-        let RecvResponseResult::RecvBody(mut flow) = flow.proceed().unwrap() else {
+        let RecvResponseResult::RecvBody(mut call) = call.proceed().unwrap() else {
             panic!("Expected RecvResponseResult::RecvBody");
         };
 
-        flow.read(chunk_data, &mut output).unwrap_err()
+        call.read(chunk_data, &mut output).unwrap_err()
     }
 
     // ChunkLenNotAscii
@@ -358,16 +358,16 @@ mod tests {
         // Create a POST request
         let req = Request::post("http://example.com").body(()).unwrap();
 
-        let (mut flow, mut output, n) = setup_send_body_flow(req);
+        let (mut call, mut output, n) = setup_send_body_call(req);
 
         // Write some data
-        let (_, n2) = flow.write(b"data", &mut output[n..]).unwrap();
+        let (_, n2) = call.write(b"data", &mut output[n..]).unwrap();
 
         // Finish the body
-        let (_, n3) = flow.write(&[], &mut output[n + n2..]).unwrap();
+        let (_, n3) = call.write(&[], &mut output[n + n2..]).unwrap();
 
         // Try to write more data after finishing
-        let err = flow
+        let err = call
             .write(b"more data", &mut output[n + n2 + n3..])
             .unwrap_err();
         assert!(matches!(err, Error::BodyContentAfterFinish));
@@ -382,22 +382,22 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, mut output, n) = setup_send_body_flow(req);
+        let (mut call, mut output, n) = setup_send_body_call(req);
 
         // Try to write more data than specified in content-length
-        let err = flow.write(b"too much data", &mut output[n..]).unwrap_err();
+        let err = call.write(b"too much data", &mut output[n..]).unwrap_err();
         assert!(matches!(err, Error::BodyLargerThanContentLength));
     }
 
     // HttpParseFail
     #[test]
     fn test_http_parse_fail() {
-        let (mut flow, _) = setup_recv_response_flow();
+        let (mut call, _) = setup_recv_response_call();
 
         // Invalid HTTP response (missing space after HTTP/1.1)
         const RES: &[u8] = b"HTTP/1.1200 OK\r\n\r\n";
 
-        let err = flow.try_response(RES, false).unwrap_err();
+        let err = call.try_response(RES, false).unwrap_err();
 
         assert!(matches!(err, Error::HttpParseFail(_)));
     }
@@ -405,7 +405,7 @@ mod tests {
     // HttpParseTooManyHeaders
     #[test]
     fn test_http_parse_too_many_headers() {
-        let (mut flow, _) = setup_recv_response_flow();
+        let (mut call, _) = setup_recv_response_call();
 
         // Create a response with many headers (more than the parser can handle)
         let mut res = String::from("HTTP/1.1 200 OK\r\n");
@@ -414,7 +414,7 @@ mod tests {
         }
         res.push_str("\r\n");
 
-        let err = flow.try_response(res.as_bytes(), false).unwrap_err();
+        let err = call.try_response(res.as_bytes(), false).unwrap_err();
 
         assert!(matches!(err, Error::HttpParseTooManyHeaders));
     }
@@ -426,10 +426,10 @@ mod tests {
         const RES: &[u8] = b"HTTP/1.1 302 Found\r\n\
             \r\n";
 
-        let (mut flow, _) = setup_redirect_flow(RES).unwrap();
+        let (mut call, _) = setup_redirect_call(RES).unwrap();
 
-        // Try to create a new flow, which should fail due to missing Location header
-        let err = flow.as_new_flow(RedirectAuthHeaders::Never).unwrap_err();
+        // Try to create a new Call, which should fail due to missing Location header
+        let err = call.as_new_call(RedirectAuthHeaders::Never).unwrap_err();
 
         assert!(matches!(err, Error::NoLocationHeader));
     }
@@ -442,10 +442,10 @@ mod tests {
             Location: \xFF\r\n\
             \r\n";
 
-        let (mut flow, _) = setup_redirect_flow(RES).unwrap();
+        let (mut call, _) = setup_redirect_call(RES).unwrap();
 
-        // Try to create a new flow, which should fail due to malformed Location header
-        let err = flow.as_new_flow(RedirectAuthHeaders::Never).unwrap_err();
+        // Try to create a new Call, which should fail due to malformed Location header
+        let err = call.as_new_call(RedirectAuthHeaders::Never).unwrap_err();
 
         assert!(matches!(err, Error::BadLocationHeader(_)));
     }
@@ -453,14 +453,14 @@ mod tests {
     // HeadersWith100
     #[test]
     fn test_headers_with_100() {
-        let (mut flow, _) = setup_recv_response_flow();
+        let (mut call, _) = setup_recv_response_call();
 
         // 100 Continue response with headers
         const RES: &[u8] = b"HTTP/1.1 100 Continue\r\n\
             Content-Type: text/plain\r\n\
             \r\n";
 
-        let err = flow.try_response(RES, false).unwrap_err();
+        let err = call.try_response(RES, false).unwrap_err();
 
         assert!(matches!(err, Error::HeadersWith100));
     }
@@ -474,10 +474,10 @@ mod tests {
             .body(())
             .unwrap();
 
-        let (mut flow, _, _) = setup_send_body_flow(req);
+        let (mut call, _, _) = setup_send_body_call(req);
 
         // Try to use consume_direct_write which doesn't work with chunked encoding
-        let err = flow.consume_direct_write(5).unwrap_err();
+        let err = call.consume_direct_write(5).unwrap_err();
         assert!(matches!(err, Error::BodyIsChunked));
     }
 

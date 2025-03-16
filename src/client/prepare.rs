@@ -6,10 +6,13 @@ use crate::ext::{HeaderIterExt, MethodExt};
 use crate::{ArrayVec, Error};
 
 use super::state::{Prepare, SendRequest};
-use super::{BodyState, CloseReason, Flow, Inner};
+use super::{BodyState, Call, CloseReason, Inner};
 
-impl<B> Flow<B, Prepare> {
-    /// Create a new Flow.
+impl<B> Call<B, Prepare> {
+    /// Create a new Call instance from an HTTP request.
+    ///
+    /// This initializes a new Call state machine in the Prepare state,
+    /// setting up the necessary internal state based on the request properties.
     pub fn new(request: Request<B>) -> Result<Self, Error> {
         let mut close_reason = ArrayVec::from_fn(|_| CloseReason::Http10);
 
@@ -47,7 +50,7 @@ impl<B> Flow<B, Prepare> {
             location: None,
         };
 
-        Ok(Flow::wrap(inner))
+        Ok(Call::wrap(inner))
     }
 
     /// Inspect call method
@@ -101,8 +104,8 @@ impl<B> Flow<B, Prepare> {
         };
     }
 
-    /// Continue to the next flow state.
-    pub fn proceed(self) -> Flow<B, SendRequest> {
-        Flow::wrap(self.inner)
+    /// Continue to the next call state.
+    pub fn proceed(self) -> Call<B, SendRequest> {
+        Call::wrap(self.inner)
     }
 }

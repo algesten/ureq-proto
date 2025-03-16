@@ -6,7 +6,7 @@ use http::{Method, Request, Response, StatusCode};
 use crate::client::state::{
     Await100, Cleanup, Prepare, RecvBody, RecvResponse, Redirect, SendBody, SendRequest,
 };
-use crate::client::{Await100Result, Flow, SendRequestResult};
+use crate::client::{Await100Result, Call, SendRequestResult};
 use crate::client::{RecvBodyResult, RecvResponseResult};
 
 pub struct Scenario {
@@ -24,69 +24,69 @@ impl Scenario {
 }
 
 impl Scenario {
-    pub fn to_prepare(&self) -> Flow<(), Prepare> {
+    pub fn to_prepare(&self) -> Call<(), Prepare> {
         // The unwraps here are ok because the user is not supposed to
         // construct tests that test the Scenario builder itself.
-        let mut flow = Flow::new(self.request.clone()).unwrap();
+        let mut call = Call::new(self.request.clone()).unwrap();
 
         for (key, value) in &self.headers_amend {
-            flow.header(key, value).unwrap();
+            call.header(key, value).unwrap();
         }
 
-        flow
+        call
     }
 
-    pub fn to_send_request(&self) -> Flow<(), SendRequest> {
-        let flow = self.to_prepare();
+    pub fn to_send_request(&self) -> Call<(), SendRequest> {
+        let call = self.to_prepare();
 
-        flow.proceed()
+        call.proceed()
     }
 
-    pub fn to_send_body(&self) -> Flow<(), SendBody> {
-        let mut flow = self.to_send_request();
+    pub fn to_send_body(&self) -> Call<(), SendBody> {
+        let mut call = self.to_send_request();
 
         // Write the prelude and discard
-        flow.write(&mut vec![0; 1024]).unwrap();
+        call.write(&mut vec![0; 1024]).unwrap();
 
-        match flow.proceed() {
+        match call.proceed() {
             Ok(Some(SendRequestResult::SendBody(v))) => v,
             _ => unreachable!("Incorrect scenario not leading to_send_body()"),
         }
     }
 
-    pub fn to_await_100(&self) -> Flow<(), Await100> {
-        let mut flow = self.to_send_request();
+    pub fn to_await_100(&self) -> Call<(), Await100> {
+        let mut call = self.to_send_request();
 
         // Write the prelude and discard
-        flow.write(&mut vec![0; 1024]).unwrap();
+        call.write(&mut vec![0; 1024]).unwrap();
 
-        match flow.proceed() {
+        match call.proceed() {
             Ok(Some(SendRequestResult::Await100(v))) => v,
             _ => unreachable!("Incorrect scenario not leading to_await_100()"),
         }
     }
 
-    pub fn to_recv_response(&self) -> Flow<(), RecvResponse> {
-        let mut flow = self.to_send_request();
+    pub fn to_recv_response(&self) -> Call<(), RecvResponse> {
+        let mut call = self.to_send_request();
 
         // Write the prelude and discard
-        flow.write(&mut vec![0; 1024]).unwrap();
+        call.write(&mut vec![0; 1024]).unwrap();
 
-        if flow.inner().should_send_body {
-            let mut flow = if flow.inner().await_100_continue {
+        if call.inner().should_send_body {
+            let mut call = if call.inner().await_100_continue {
                 // Go via Await100
-                let flow = match flow.proceed() {
+                let call = match call.proceed() {
                     Ok(Some(SendRequestResult::Await100(v))) => v,
                     _ => unreachable!(),
                 };
 
                 // Proceed straight out of Await100
-                match flow.proceed() {
+                match call.proceed() {
                     Ok(Await100Result::SendBody(v)) => v,
                     _ => unreachable!(),
                 }
             } else {
-                match flow.proceed() {
+                match call.proceed() {
                     Ok(Some(SendRequestResult::SendBody(v))) => v,
                     _ => unreachable!(),
                 }
@@ -96,45 +96,45 @@ impl Scenario {
             let mut output = vec![0; 1024];
 
             while !input.is_empty() {
-                let (input_used, _) = flow.write(input, &mut output).unwrap();
+                let (input_used, _) = call.write(input, &mut output).unwrap();
                 input = &input[input_used..];
             }
 
-            flow.write(&[], &mut output).unwrap();
+            call.write(&[], &mut output).unwrap();
 
-            flow.proceed().unwrap()
+            call.proceed().unwrap()
         } else {
-            match flow.proceed() {
+            match call.proceed() {
                 Ok(Some(SendRequestResult::RecvResponse(v))) => v,
                 _ => unreachable!(),
             }
         }
     }
 
-    pub fn to_recv_body(&self) -> Flow<(), RecvBody> {
-        let mut flow = self.to_recv_response();
+    pub fn to_recv_body(&self) -> Call<(), RecvBody> {
+        let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);
 
         // use crate::client::test::TestSliceExt;
         // println!("{:?}", input.as_slice().as_str());
 
-        flow.try_response(&input, true).unwrap();
+        call.try_response(&input, true).unwrap();
 
-        match flow.proceed() {
+        match call.proceed() {
             Some(RecvResponseResult::RecvBody(v)) => v,
             _ => unreachable!("Incorrect scenario not leading to_recv_body()"),
         }
     }
 
-    pub fn to_redirect(&self) -> Flow<(), Redirect> {
-        let mut flow = self.to_recv_response();
+    pub fn to_redirect(&self) -> Call<(), Redirect> {
+        let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);
 
-        flow.try_response(&input, true).unwrap();
+        call.try_response(&input, true).unwrap();
 
-        match flow.proceed().unwrap() {
+        match call.proceed().unwrap() {
             RecvResponseResult::Redirect(v) => v,
             RecvResponseResult::RecvBody(mut state) => {
                 let mut output = vec![0; 1024];
@@ -150,21 +150,21 @@ impl Scenario {
         }
     }
 
-    pub fn to_cleanup(&self) -> Flow<(), Cleanup> {
-        let mut flow = self.to_recv_response();
+    pub fn to_cleanup(&self) -> Call<(), Cleanup> {
+        let mut call = self.to_recv_response();
 
         let input = write_response(&self.response);
 
-        flow.try_response(&input, true).unwrap();
+        call.try_response(&input, true).unwrap();
 
-        match flow.proceed().unwrap() {
+        match call.proceed().unwrap() {
             RecvResponseResult::Redirect(v) => v.proceed(),
-            RecvResponseResult::RecvBody(mut flow) => {
+            RecvResponseResult::RecvBody(mut call) => {
                 let mut output = vec![0; 1024];
 
-                flow.read(&self.recv_body, &mut output).unwrap();
+                call.read(&self.recv_body, &mut output).unwrap();
 
-                match flow.proceed() {
+                match call.proceed() {
                     Some(RecvBodyResult::Redirect(v)) => v.proceed(),
                     Some(RecvBodyResult::Cleanup(v)) => v,
                     _ => unreachable!("Incorrect scenario not leading to_redirect()"),
