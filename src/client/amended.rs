@@ -1,4 +1,4 @@
-use std::mem;
+use std::{fmt, mem};
 
 use http::uri::PathAndQuery;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version};
@@ -164,7 +164,6 @@ impl<Body> AmendedRequest<Body> {
     pub fn analyze(
         &self,
         wanted_mode: BodyWriter,
-        skip_method_body_check: bool,
         allow_non_standard_methods: bool,
     ) -> Result<RequestInfo, Error> {
         let v = self.request.version();
@@ -228,19 +227,6 @@ impl<Body> AmendedRequest<Body> {
         } else {
             wanted_mode
         };
-
-        let enforce_body_method = !allow_non_standard_methods && !skip_method_body_check;
-
-        if enforce_body_method {
-            let need_body = self.method().need_request_body();
-            let has_body = body_mode.has_body();
-
-            if !need_body && has_body {
-                return Err(Error::MethodForbidsBody(self.method().clone()));
-            } else if need_body && !has_body {
-                return Err(Error::MethodRequiresBody(self.method().clone()));
-            }
-        }
 
         Ok(RequestInfo {
             body_mode,
@@ -337,6 +323,17 @@ pub(crate) struct RequestInfo {
     pub req_host_header: bool,
     pub req_auth_header: bool,
     pub req_body_header: bool,
+}
+
+impl<B> fmt::Debug for AmendedRequest<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AmendedRequest")
+            .field("method", &self.request.method())
+            .field("uri", &self.uri)
+            .field("headers", &self.headers)
+            .field("unset", &self.unset)
+            .finish()
+    }
 }
 
 #[cfg(test)]

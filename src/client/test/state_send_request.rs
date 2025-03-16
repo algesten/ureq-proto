@@ -1,4 +1,4 @@
-use crate::client::flow::SendRequestResult;
+use crate::client::SendRequestResult;
 use crate::Error;
 
 use super::scenario::Scenario;
@@ -8,13 +8,13 @@ use super::TestSliceExt;
 fn write_request() {
     let scenario = Scenario::builder().get("https://q.test").build();
 
-    let mut flow = scenario.to_send_request();
+    let mut call = scenario.to_send_request();
 
-    assert!(!flow.can_proceed());
+    assert!(!call.can_proceed());
 
     let mut o = vec![0; 1024];
 
-    let n = flow.write(&mut o).unwrap();
+    let n = call.write(&mut o).unwrap();
     assert_eq!(n, 32);
 
     let cmp = "\
@@ -23,34 +23,34 @@ fn write_request() {
         \r\n";
 
     assert_eq!(o[..n].as_str(), cmp);
-    assert!(flow.can_proceed());
+    assert!(call.can_proceed());
 }
 
 #[test]
 fn short_buffer() {
     let scenario = Scenario::builder().get("https://q.test").build();
 
-    let mut flow = scenario.to_send_request();
+    let mut call = scenario.to_send_request();
 
-    assert!(!flow.can_proceed());
+    assert!(!call.can_proceed());
 
     // Buffer too short to hold entire request
     let mut output = vec![0; 10];
 
-    let r = flow.write(&mut output);
+    let r = call.write(&mut output);
 
     assert_eq!(r.unwrap_err(), Error::OutputOverflow);
-    assert!(!flow.can_proceed());
+    assert!(!call.can_proceed());
 }
 
 #[test]
 fn proceed_without_body() {
     let scenario = Scenario::builder().get("https://q.test").build();
 
-    let mut flow = scenario.to_send_request();
-    flow.write(&mut vec![0; 1024]).unwrap();
+    let mut call = scenario.to_send_request();
+    call.write(&mut vec![0; 1024]).unwrap();
 
-    match flow.proceed() {
+    match call.proceed() {
         Ok(Some(SendRequestResult::RecvResponse(_))) => {}
         _ => panic!("Mehod without body should result in RecvResponse"),
     }
@@ -60,10 +60,10 @@ fn proceed_without_body() {
 fn proceed_with_body() {
     let scenario = Scenario::builder().post("https://q.test").build();
 
-    let mut flow = scenario.to_send_request();
-    flow.write(&mut vec![0; 1024]).unwrap();
+    let mut call = scenario.to_send_request();
+    call.write(&mut vec![0; 1024]).unwrap();
 
-    match flow.proceed() {
+    match call.proceed() {
         Ok(Some(SendRequestResult::SendBody(_))) => {}
         _ => panic!("Method with body should result in SendBody"),
     }
@@ -76,10 +76,10 @@ fn proceed_with_await_100() {
         .header("expect", "100-continue")
         .build();
 
-    let mut flow = scenario.to_send_request();
-    flow.write(&mut vec![0; 1024]).unwrap();
+    let mut call = scenario.to_send_request();
+    call.write(&mut vec![0; 1024]).unwrap();
 
-    match flow.proceed() {
+    match call.proceed() {
         Ok(Some(SendRequestResult::Await100(_))) => {}
         _ => panic!("Method with body and Expect: 100-continue should result in Await100"),
     }
@@ -94,10 +94,10 @@ fn proceed_without_body_and_expect_100() {
         .header("expect", "100-continue")
         .build();
 
-    let mut flow = scenario.to_send_request();
-    flow.write(&mut vec![0; 1024]).unwrap();
+    let mut call = scenario.to_send_request();
+    call.write(&mut vec![0; 1024]).unwrap();
 
-    match flow.proceed() {
+    match call.proceed() {
         Ok(Some(SendRequestResult::RecvResponse(_))) => {}
         _ => panic!("Method without body and Expect: 100-continue should result in RecvResponse"),
     }

@@ -42,7 +42,8 @@ pub fn try_parse_response<const N: usize>(
     };
 
     let version = {
-        let v = res.version.ok_or(Error::MissingResponseVersion)?;
+        // unwrap: Looking at the impl of parse(), version cannot be None.
+        let v = res.version.unwrap_or(1);
         match v {
             0 => Version::HTTP_10,
             1 => Version::HTTP_11,
@@ -51,8 +52,10 @@ pub fn try_parse_response<const N: usize>(
     };
 
     let status = {
-        let v = res.code.ok_or(Error::ResponseMissingStatus)?;
-        StatusCode::from_u16(v).map_err(|_| Error::ResponseInvalidStatus)?
+        // unwrap: Looking at the impl of parse(), code cannot be None.
+        let v = res.code.unwrap_or(000);
+        // unwrap: Looking at the impl of parse(), the status is 3 digits and cant fail.
+        StatusCode::from_u16(v).unwrap()
     };
 
     let mut builder = Response::builder().version(version).status(status);
@@ -106,7 +109,8 @@ pub fn try_parse_partial_response<const N: usize>(
             Some(v) => v,
             None => return Ok(None),
         };
-        StatusCode::from_u16(v).map_err(|_| Error::ResponseInvalidStatus)?
+        // unwrap: Looking at the impl of parse(), the status is 3 digits and cant fail.
+        StatusCode::from_u16(v).unwrap_or_default()
     };
 
     let mut builder = Response::builder().version(version).status(status);
@@ -162,7 +166,8 @@ pub fn try_parse_request<const N: usize>(
     };
 
     let version = {
-        let v = req.version.ok_or(Error::MissingResponseVersion)?;
+        // unwrap: Looking at the impl of parse(), version cannot be None.
+        let v = req.version.unwrap_or(1);
         match v {
             0 => Version::HTTP_10,
             1 => Version::HTTP_11,
@@ -171,8 +176,10 @@ pub fn try_parse_request<const N: usize>(
     };
 
     let method = {
-        let v = req.method.ok_or(Error::RequestMissingMethod)?;
-        Method::from_bytes(v.as_bytes()).map_err(|_| Error::RequestInvalidMethod)?
+        // unwrap: Looking at the impl of parse(), method cannot be None.
+        let v = req.method.unwrap_or("GET");
+        // unwrap: Looking at the impl of parse(), method will be something.
+        Method::from_bytes(v.as_bytes()).unwrap_or_default()
     };
 
     let uri = req.path.unwrap_or("/");

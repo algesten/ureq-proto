@@ -15,21 +15,21 @@ fn receive_incomplete_response() {
     // -1 to never reach the end
     for i in 14..RESPONSE.len() - 1 {
         let scenario = Scenario::builder().get("https://q.test").build();
-        let mut flow = scenario.to_recv_response();
+        let mut call = scenario.to_recv_response();
 
-        let (input_used, maybe_response) = flow.try_response(&RESPONSE[..i], true).unwrap();
+        let (input_used, maybe_response) = call.try_response(&RESPONSE[..i], true).unwrap();
         assert_eq!(input_used, 0);
         assert!(maybe_response.is_none());
-        assert!(!flow.can_proceed());
+        assert!(!call.can_proceed());
     }
 }
 
 #[test]
 fn receive_complete_response() {
     let scenario = Scenario::builder().get("https://q.test").build();
-    let mut flow = scenario.to_recv_response();
+    let mut call = scenario.to_recv_response();
 
-    let (input_used, maybe_response) = flow.try_response(RESPONSE, true).unwrap();
+    let (input_used, maybe_response) = call.try_response(RESPONSE, true).unwrap();
     assert_eq!(input_used, 66);
     assert!(maybe_response.is_some());
 
@@ -46,7 +46,7 @@ fn receive_complete_response() {
         .iter()
         .has(header::CONTENT_TYPE, "text/plain"));
 
-    assert!(flow.can_proceed());
+    assert!(call.can_proceed());
 }
 
 #[test]
@@ -59,29 +59,29 @@ fn prepended_100_continue() {
         .header("expect", "100-continue")
         .build();
 
-    let mut flow = scenario.to_recv_response();
+    let mut call = scenario.to_recv_response();
 
     // incomplete 100-continue should be ignored.
-    let (input_used, maybe_response) = flow
+    let (input_used, maybe_response) = call
         .try_response(b"HTTP/1.1 100 Continue\r\n", true)
         .unwrap();
     assert_eq!(input_used, 0);
     assert!(maybe_response.is_none());
-    assert!(!flow.can_proceed());
+    assert!(!call.can_proceed());
 
     // complete 100-continue should be consumed without producing a request
-    let (input_used, maybe_response) = flow
+    let (input_used, maybe_response) = call
         .try_response(b"HTTP/1.1 100 Continue\r\n\r\n", true)
         .unwrap();
     assert_eq!(input_used, 25);
     assert!(maybe_response.is_none());
-    assert!(!flow.can_proceed());
+    assert!(!call.can_proceed());
 
     // full response after prepended 100-continue
-    let (input_used, maybe_response) = flow.try_response(RESPONSE, true).unwrap();
+    let (input_used, maybe_response) = call.try_response(RESPONSE, true).unwrap();
     assert_eq!(input_used, 66);
     assert!(maybe_response.is_some());
-    assert!(flow.can_proceed());
+    assert!(call.can_proceed());
 }
 
 #[test]
@@ -92,11 +92,11 @@ fn expect_100_without_100_continue() {
         .header("expect", "100-continue")
         .build();
 
-    let mut flow = scenario.to_recv_response();
+    let mut call = scenario.to_recv_response();
 
     // full response and no 100-continue
-    let (input_used, maybe_response) = flow.try_response(RESPONSE, true).unwrap();
+    let (input_used, maybe_response) = call.try_response(RESPONSE, true).unwrap();
     assert_eq!(input_used, 66);
     assert!(maybe_response.is_some());
-    assert!(flow.can_proceed());
+    assert!(call.can_proceed());
 }
