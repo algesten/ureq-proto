@@ -252,6 +252,14 @@ impl BodyReader {
         }
     }
 
+    pub fn has_body(&self) -> bool {
+        match self {
+            BodyReader::NoBody => false,
+            BodyReader::LengthDelimited(v) if *v == 0 => false,
+            _ => true,
+        }
+    }
+
     #[cfg(feature = "server")]
     pub fn for_request<'a>(
         http10: bool,
@@ -260,22 +268,19 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        let has_no_body = !method.need_request_body();
+        let is_head = method == Method::HEAD;
 
-        if has_no_body {
-            let mode = if http10 {
-                Self::CloseDelimited
-            } else {
-                Self::NoBody
-            };
-            return Ok(mode);
+        if is_head {
+            return Ok(Self::NoBody);
         }
 
-        let ret = match Self::header_defined(http10, header_lookup)? {
-            // Request bodies cannot be close delimited (even under http10).
-            Self::CloseDelimited => Self::NoBody,
-            r => r,
-        };
+        let ret = Self::header_defined(http10, header_lookup)?.unwrap_or_else(|| {
+            if !http10 && method.need_request_body() {
+                Self::Chunked(Dechunker::new())
+            } else {
+                Self::NoBody
+            }
+        });
 
         Ok(ret)
     }
@@ -291,7 +296,8 @@ impl BodyReader {
         let is_informational = (100..=199).contains(&status_code);
         let is_redirect = (300..=399).contains(&status_code) && status_code != 304;
 
-        let header_defined = Self::header_defined(http10, header_lookup)?;
+        let header_defined =
+            Self::header_defined(http10, header_lookup)?.unwrap_or(Self::CloseDelimited);
 
         // Implicitly we know that CloseDelimited means no header indicated that
         // there was a body.
@@ -326,7 +332,7 @@ impl BodyReader {
     fn header_defined<'a>(
         http10: bool,
         header_lookup: &'a dyn Fn(HeaderName) -> Option<&'a str>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         let mut content_length: Option<u64> = None;
         let mut chunked = false;
 
@@ -354,14 +360,14 @@ impl BodyReader {
             // Messages MUST NOT include both a Content-Length header field and a
             // non-identity transfer-coding. If the message does include a non-
             // identity transfer-coding, the Content-Length MUST be ignored.
-            return Ok(Self::Chunked(Dechunker::new()));
+            return Ok(Some(Self::Chunked(Dechunker::new())));
         }
 
         if let Some(len) = content_length {
-            return Ok(Self::LengthDelimited(len));
+            return Ok(Some(Self::LengthDelimited(len)));
         }
 
-        Ok(Self::CloseDelimited)
+        Ok(None)
     }
 
     pub fn read(

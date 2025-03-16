@@ -101,3 +101,54 @@ fn cannot_proceed_without_request() {
     assert!(!reply.can_proceed());
     assert!(reply.proceed().is_none());
 }
+
+#[test]
+fn proceed_to_provide_response_with_zero_length() {
+    // Create a new Reply directly
+    let mut reply = Reply::new().unwrap();
+
+    // POST request with Content-Length: 0
+    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 0\r\n\r\n";
+    let (_, request) = reply.try_request(input).unwrap();
+    assert!(request.is_some());
+
+    // Should proceed to ProvideResponse since there's no body to receive
+    match reply.proceed().unwrap() {
+        RecvRequestResult::ProvideResponse(_) => {}
+        _ => panic!("Expected ProvideResponse state"),
+    }
+}
+
+#[test]
+fn proceed_to_recv_body_with_get() {
+    // Create a new Reply directly
+    let mut reply = Reply::new().unwrap();
+
+    // GET request with Content-Length: 5
+    let input = b"GET /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 5\r\n\r\n";
+    let (_, request) = reply.try_request(input).unwrap();
+    assert!(request.is_some());
+
+    // Should proceed to RecvBody since Content-Length indicates a body
+    match reply.proceed().unwrap() {
+        RecvRequestResult::RecvBody(_) => {}
+        _ => panic!("Expected RecvBody state"),
+    }
+}
+
+#[test]
+fn proceed_to_provide_response_with_head() {
+    // Create a new Reply directly
+    let mut reply = Reply::new().unwrap();
+
+    // HEAD request with Content-Length: 5 (should still go to ProvideResponse)
+    let input = b"HEAD /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 5\r\n\r\n";
+    let (_, request) = reply.try_request(input).unwrap();
+    assert!(request.is_some());
+
+    // Should proceed to ProvideResponse since HEAD requests never have a body
+    match reply.proceed().unwrap() {
+        RecvRequestResult::ProvideResponse(_) => {}
+        _ => panic!("Expected ProvideResponse state"),
+    }
+}

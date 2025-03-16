@@ -1,7 +1,7 @@
 use http::{header, Request, Version};
 
 use crate::body::BodyReader;
-use crate::ext::{HeaderIterExt, MethodExt};
+use crate::ext::HeaderIterExt;
 use crate::parser::try_parse_request;
 use crate::util::log_data;
 use crate::{ArrayVec, CloseReason, Error};
@@ -130,8 +130,7 @@ impl Reply<RecvRequest> {
             return None;
         }
 
-        let method = self.inner.method.as_ref().unwrap();
-        let has_request_body = method.need_request_body();
+        let has_request_body = self.inner.state.reader.as_ref().unwrap().has_body();
 
         if self.inner.expect_100 {
             Some(RecvRequestResult::Send100(Reply::wrap(self.inner)))
