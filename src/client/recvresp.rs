@@ -52,7 +52,7 @@ impl Call<RecvResponse> {
             .headers()
             .get_all(header::LOCATION)
             .into_iter()
-            .last()
+            .next_back()
             .cloned();
 
         if response.headers().iter().has(header::CONNECTION, "close") {
