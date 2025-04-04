@@ -27,7 +27,7 @@ use crate::Error;
 ///     which closes the connection).
 /// 5.  `Transfer-Encoding: chunked` header when the content length for a body is unknown.
 /// 6.  `Content-Encoding` header to indicate on-the-wire compression. The compression itself
-///      is out of scope, but the user must be able to set it.
+///     is out of scope, but the user must be able to set it.
 /// 7.  `User-Agent` header.
 /// 8.  `Accept` header.
 /// 9.  Changing the `Method` when following redirects.
