@@ -1,4 +1,4 @@
-use http::{Method, Response, StatusCode};
+use http::{header, Method, Response, StatusCode};
 
 use crate::client::test::TestSliceExt;
 use crate::client::RedirectAuthHeaders;
@@ -399,6 +399,36 @@ fn dont_keep_content_length() {
             GET /bar HTTP/1.1\r\n\
             host: b.test\r\n\
             x-my: ya\r\n\
+            \r\n";
+    assert_eq!(o[..n].as_str(), cmp);
+}
+
+#[test]
+fn can_set_cookie_on_redirected_request() {
+    let scenario = Scenario::builder()
+        .get("https://a.test")
+        .header("cookie", "not redirected")
+        .redirect(StatusCode::FOUND, "https://b.test")
+        .build();
+
+    let mut call = scenario
+        .to_redirect()
+        .as_new_call(RedirectAuthHeaders::Never)
+        .unwrap()
+        .unwrap();
+
+    call.header(header::COOKIE, "hello").unwrap();
+
+    let mut call = call.proceed();
+
+    let mut o = vec![0; 1024];
+
+    let n = call.write(&mut o).unwrap();
+
+    let cmp = "\
+            GET / HTTP/1.1\r\n\
+            cookie: hello\r\n\
+            host: b.test\r\n\
             \r\n";
     assert_eq!(o[..n].as_str(), cmp);
 }

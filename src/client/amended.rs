@@ -30,23 +30,17 @@ use crate::Error;
 ///     is out of scope, but the user must be able to set it.
 /// 7.  `User-Agent` header.
 /// 8.  `Accept` header.
-/// 9.  Changing the `Method` when following redirects.
-/// 10. Changing the `Uri` when following redirect.
 ///
 pub(crate) struct AmendedRequest {
     request: Request<()>,
-    uri: Option<Uri>,
     headers: Vec<(HeaderName, HeaderValue)>,
-    unset: Vec<HeaderName>,
 }
 
 impl AmendedRequest {
     pub fn new(request: Request<()>) -> Self {
         AmendedRequest {
             request,
-            uri: None,
             headers: vec![],
-            unset: vec![],
         }
     }
 
@@ -55,16 +49,8 @@ impl AmendedRequest {
         mem::replace(&mut self.request, empty)
     }
 
-    pub fn set_uri(&mut self, uri: Uri) {
-        self.uri = Some(uri);
-    }
-
     pub fn uri(&self) -> &Uri {
-        if let Some(uri) = &self.uri {
-            uri
-        } else {
-            self.request.uri()
-        }
+        self.request.uri()
     }
 
     pub fn prelude(&self) -> (&Method, &str, Version) {
@@ -96,18 +82,6 @@ impl AmendedRequest {
         Ok(())
     }
 
-    pub fn unset_header<K>(&mut self, name: K) -> Result<(), Error>
-    where
-        HeaderName: TryFrom<K>,
-        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
-    {
-        let name = <HeaderName as TryFrom<K>>::try_from(name)
-            .map_err(Into::into)
-            .map_err(|e| Error::BadHeader(e.to_string()))?;
-        self.unset.push(name);
-        Ok(())
-    }
-
     pub fn original_request_headers(&self) -> &HeaderMap {
         self.request.headers()
     }
@@ -117,7 +91,6 @@ impl AmendedRequest {
             .iter()
             .map(|v| (&v.0, &v.1))
             .chain(self.request.headers().iter())
-            .filter(|v| !self.unset.iter().any(|x| x == v.0))
     }
 
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
@@ -326,9 +299,7 @@ impl fmt::Debug for AmendedRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AmendedRequest")
             .field("method", &self.request.method())
-            .field("uri", &self.uri)
             .field("headers", &self.headers)
-            .field("unset", &self.unset)
             .finish()
     }
 }

@@ -69,28 +69,28 @@ impl Call<Redirect> {
         };
 
         let mut request = previous.take_request();
+
+        // The calculated redirect method
         *request.method_mut() = new_method;
-
-        // Next state
-        let mut next = Call::new(request)?;
-
-        let request = &mut next.inner.request;
 
         let keep_auth_header = match redirect_auth_headers {
             RedirectAuthHeaders::Never => false,
             RedirectAuthHeaders::SameHost => can_redirect_auth_header(request.uri(), &uri),
         };
 
-        // Override with the new uri
-        request.set_uri(uri);
+        // The redirect URI
+        *request.uri_mut() = uri;
 
+        // Mutate the original request to remove headers we cannot keep in the redirect.
+        let headers = request.headers_mut();
         if !keep_auth_header {
-            request.unset_header(header::AUTHORIZATION)?;
+            headers.remove(header::AUTHORIZATION);
         }
-        request.unset_header(header::COOKIE)?;
-        request.unset_header(header::CONTENT_LENGTH)?;
+        headers.remove(header::COOKIE);
+        headers.remove(header::CONTENT_LENGTH);
 
-        // TODO(martin): clear out unwanted headers
+        // Next state
+        let next = Call::new(request)?;
 
         Ok(Some(next))
     }
