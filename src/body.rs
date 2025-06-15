@@ -460,6 +460,14 @@ impl BodyReader {
         }
     }
 
+    #[cfg(feature = "client")]
+    pub fn is_ended_chunked(&self) -> bool {
+        match self {
+            BodyReader::Chunked(v) => v.is_ending() || v.is_ended(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn is_on_chunk_boundary(&self) -> bool {
         match self {
             BodyReader::NoBody => false,

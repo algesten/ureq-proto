@@ -57,6 +57,24 @@ impl Call<RecvBody> {
         rbm.is_ended()
     }
 
+    /// Tell if we got an end chunk when reading chunked.
+    ///
+    /// A normal chunk ending is:
+    ///
+    /// ```text
+    /// 0\r\n
+    /// \r\n
+    /// ```
+    ///
+    /// However there are cases where the server abruptly does a `FIN` after sending `0\r\n`.
+    /// This means we still got the entire response body, and could use it, but not reuse the connection.
+    ///
+    /// This returns true as soon as we got the `0\r\n`.
+    pub fn is_ended_chunked(&self) -> bool {
+        let rbm = self.inner.state.reader.as_ref().unwrap();
+        rbm.is_ended_chunked()
+    }
+
     /// Tell if response body is closed delimited
     ///
     /// HTTP/1.0 does not have `content-length` to serialize many requests over the same
