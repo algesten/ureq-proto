@@ -267,9 +267,7 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        let is_head = method == Method::HEAD;
-
-        if is_head {
+        if !method.allow_response_body() {
             return Ok(Self::NoBody);
         }
 
