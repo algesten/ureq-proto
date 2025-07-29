@@ -112,12 +112,13 @@ impl Call<SendRequest> {
         if self.inner.analyzed {
             return Ok(());
         }
+
         let info = self.inner.request.analyze(
             self.inner.state.writer,
             self.inner.state.allow_non_standard_methods,
         )?;
 
-        if !info.req_host_header {
+        if !info.req_host_header && self.inner.request.method() != Method::CONNECT {
             if let Some(host) = self.inner.request.uri().host() {
                 // User did not set a host header, and there is one in uri, we set that.
                 // We need an owned value to set the host header.
@@ -130,12 +131,18 @@ impl Call<SendRequest> {
         }
 
         if let Some(auth) = self.inner.request.uri().authority() {
+            let auth = auth.clone();
+
             if auth.userinfo().is_some() && !info.req_auth_header {
                 let user = auth.username().unwrap_or_default();
                 let pass = auth.password().unwrap_or_default();
                 let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
                 let auth = format!("Basic {}", creds);
                 self.inner.request.set_header(header::AUTHORIZATION, auth)?;
+            }
+
+            if self.inner.request.method() == Method::CONNECT {
+                self.inner.request.set_header(header::HOST, auth.as_str())?;
             }
         }
 

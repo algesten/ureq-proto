@@ -266,7 +266,7 @@ pub(crate) struct BodyState {
 impl BodyState {
     pub(crate) fn need_response_body(&self, method: &Method) -> bool {
         // HEAD requests never have a body, regardless of what the writer says
-        if *method == Method::HEAD {
+        if *method == Method::HEAD || *method == Method::CONNECT {
             return false;
         }
         // unwrap is ok because we only use this after the writer is set.
@@ -349,8 +349,9 @@ mod send100;
 fn append_request(inner: Inner, response: Response<()>) -> Inner {
     // unwrap is ok because method is set early.
     let is_head = inner.method.as_ref().unwrap() == Method::HEAD;
+    let is_connect = inner.method.as_ref().unwrap() == Method::CONNECT;
 
-    let default_body_mode = if !is_head && response.status().body_allowed() {
+    let default_body_mode = if !(is_head || is_connect) && response.status().body_allowed() {
         BodyWriter::new_chunked()
     } else {
         BodyWriter::new_none()
@@ -881,5 +882,80 @@ mod tests {
         ensure!(AmendedResponse, 400); // ~368
         ensure!(Inner, 600); // ~512
         ensure!(Reply<RecvRequest>, 600); // ~512
+    }
+
+    #[test]
+    fn connect_flow_with_body_headers_is_ok() {
+        let mut reply = Reply::new().unwrap();
+
+        let input =
+            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
+
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 73);
+        assert_eq!(request.method(), "CONNECT");
+        assert_eq!(request.uri().path(), "");
+
+        // Should go to ProvideReponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvRequestResult::ProvideResponse(reply) = reply.proceed().unwrap() else {
+            panic!("Expected ProvideResponse state");
+        };
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        let mut reply = reply.provide(response).unwrap();
+
+        let mut output = vec![0_u8; 1024];
+        let n = reply.write(&mut output).unwrap();
+
+        // Response should ignore provided content-length/transfer-encoding headers
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
+
+        // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
+        let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
+            panic!("Expected Cleanup state")
+        };
+    }
+
+    #[test]
+    fn connect_flow_without_body_headers_is_ok() {
+        let mut reply = Reply::new().unwrap();
+
+        let input = b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\n\r\n";
+
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 51);
+        assert_eq!(request.method(), "CONNECT");
+        assert_eq!(request.uri().path(), "");
+
+        // Should go to ProvideReponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvRequestResult::ProvideResponse(reply) = reply.proceed().unwrap() else {
+            panic!("Expected ProvideResponse state");
+        };
+
+        let response = Response::builder().status(StatusCode::OK).body(()).unwrap();
+
+        let mut reply = reply.provide(response).unwrap();
+
+        let mut output = vec![0_u8; 1024];
+        let n = reply.write(&mut output).unwrap();
+
+        // Response should ignore provided content-length/transfer-encoding headers
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(s, "HTTP/1.1 200 OK\r\n\r\n");
+
+        // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
+            panic!("Expected Cleanup state")
+        };
     }
 }
