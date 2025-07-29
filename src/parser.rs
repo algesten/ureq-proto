@@ -212,7 +212,7 @@ mod test {
 
     #[test]
     fn error_on_invalid_authority() {
-        let bytes = "HTTP/1.1 example\".com HTTP/1.1\r\n\r\n";
+        let bytes = "GET example\".com HTTP/1.1\r\n\r\n";
         try_parse_request::<0>(bytes.as_bytes()).expect_err("invalid URI character");
     }
 }
