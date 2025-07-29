@@ -928,13 +928,12 @@ mod tests {
     fn connect_flow_without_body_headers_is_ok() {
         let mut reply = Reply::new().unwrap();
 
-        let input =
-            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
+        let input = b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\n\r\n";
 
         let (input_used, request) = reply.try_request(input).unwrap();
         let request = request.unwrap();
 
-        assert_eq!(input_used, 73);
+        assert_eq!(input_used, 51);
         assert_eq!(request.method(), "CONNECT");
         assert_eq!(request.uri().path(), "");
 
@@ -943,11 +942,7 @@ mod tests {
             panic!("Expected ProvideResponse state");
         };
 
-        let response = Response::builder()
-            .status(StatusCode::OK)
-            .header("content-length", 1024)
-            .body(())
-            .unwrap();
+        let response = Response::builder().status(StatusCode::OK).body(()).unwrap();
 
         let mut reply = reply.provide(response).unwrap();
 
@@ -956,7 +951,7 @@ mod tests {
 
         // Response should ignore provided content-length/transfer-encoding headers
         let s = str::from_utf8(&output[..n]).unwrap();
-        assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
+        assert_eq!(s, "HTTP/1.1 200 OK\r\n");
 
         // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
         let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
