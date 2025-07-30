@@ -271,13 +271,7 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        let is_head = method == Method::HEAD;
-        if is_head {
-            return Ok(Self::NoBody);
-        }
-
-        let is_connect = method == Method::CONNECT;
-        if is_connect {
+        if !method.allow_response_body() {
             return Ok(Self::NoBody);
         }
 
