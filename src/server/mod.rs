@@ -953,7 +953,7 @@ mod tests {
         let s = str::from_utf8(&output[..n]).unwrap();
         assert_eq!(s, "HTTP/1.1 200 OK\r\n");
 
-        // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
+        // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
         let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
             panic!("Expected Cleanup state")
         };

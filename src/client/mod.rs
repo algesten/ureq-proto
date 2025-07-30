@@ -1235,4 +1235,68 @@ mod tests {
         ensure!(Inner, 600); // 512
         ensure!(Call<SendRequest>, 600); // 512
     }
+
+    #[test]
+    fn connect_flow_without_body_headers_is_ok() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected RecvResponse state")
+        };
+    }
+
+    #[test]
+    fn connect_flow_with_body_headers_is_ok() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length 1024\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected RecvResponse state")
+        };
+
+        let input = b"HTTP/1.1 200 OK\r\ncontent-length 1024\r\n";
+        let (n, _res) = call.try_response(input, true).unwrap();
+        assert_eq!(n, 38);
+
+        // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvResponseResult::Cleanup(_call) = call.proceed().unwrap() else {
+            panic!("Expected Cleanup state")
+        };
+    }
 }
