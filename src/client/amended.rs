@@ -55,14 +55,18 @@ impl AmendedRequest {
 
     pub fn prelude(&self) -> (&Method, &str, Version) {
         let r = &self.request;
-        (
-            r.method(),
+
+        let target = if r.method() == Method::CONNECT {
+            // unwrap allowed as previous code returns error if no authority exists for CONNECT request
+            self.uri().authority().unwrap().as_str()
+        } else {
             self.uri()
                 .path_and_query()
                 .map(|p| p.as_str())
-                .unwrap_or("/"),
-            r.version(),
-        )
+                .unwrap_or("/")
+        };
+
+        (r.method(), target, r.version())
     }
 
     pub fn set_header<K, V>(&mut self, name: K, value: V) -> Result<(), Error>

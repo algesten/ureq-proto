@@ -951,7 +951,7 @@ mod tests {
 
         // Response should ignore provided content-length/transfer-encoding headers
         let s = str::from_utf8(&output[..n]).unwrap();
-        assert_eq!(s, "HTTP/1.1 200 OK\r\n");
+        assert_eq!(s, "HTTP/1.1 200 OK\r\n\r\n");
 
         // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
         let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
