@@ -47,16 +47,13 @@ impl Reply<SendResponse> {
     pub fn proceed(self) -> SendResponseResult {
         assert!(self.is_finished());
 
-        let inner = self.inner;
-
-        let method = inner.method.as_ref().unwrap();
-
-        // unwrap is ok because method is always set during request parsing
-        if inner.state.need_response_body(method) {
-            SendResponseResult::SendBody(Reply::wrap(inner))
-        } else {
-            SendResponseResult::Cleanup(Reply::wrap(inner))
+        if let Some(writer) = self.inner.state.writer {
+            if writer.has_body() {
+                return SendResponseResult::SendBody(Reply::wrap(self.inner));
+            }
         }
+
+        SendResponseResult::Cleanup(Reply::wrap(self.inner))
     }
 }
 

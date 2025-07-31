@@ -25,12 +25,12 @@ impl Call<Prepare> {
             close_reason.push(CloseReason::ClientConnectionClose);
         }
 
-        let should_send_body = request.method().need_request_body();
+        let need_request_body = request.method().need_request_body();
         let await_100_continue = request.headers().iter().has_expect_100();
 
         let request = AmendedRequest::new(request);
 
-        let default_body_mode = if request.method().need_request_body() {
+        let default_body_mode = if need_request_body {
             BodyWriter::new_chunked()
         } else {
             BodyWriter::new_none()
@@ -44,7 +44,8 @@ impl Call<Prepare> {
                 ..Default::default()
             },
             close_reason,
-            should_send_body,
+            force_send_body: false,
+            force_recv_body: false,
             await_100_continue,
             status: None,
             location: None,
@@ -91,17 +92,13 @@ impl Call<Prepare> {
         self.inner.request.set_header(key, value)
     }
 
-    /// Convert the to send body despite method.
+    /// Convert the state to send body despite method.
     ///
     /// Methods like GET, HEAD and DELETE should not have a request body.
     /// Some broken APIs use bodies anyway, and this is an escape hatch to
     /// interoperate with such services.
-    pub fn send_body_despite_method(&mut self) {
-        self.inner.should_send_body = true;
-        self.inner.state = BodyState {
-            writer: BodyWriter::new_chunked(),
-            ..Default::default()
-        };
+    pub fn force_send_body(&mut self) {
+        self.inner.force_send_body = true;
     }
 
     /// Continue to the next call state.

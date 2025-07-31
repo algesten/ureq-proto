@@ -6,7 +6,7 @@ use http::uri::Scheme;
 use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Uri, Version};
 
 use crate::client::amended::AmendedRequest;
-use crate::ext::{AuthorityExt, SchemeExt};
+use crate::ext::{AuthorityExt, MethodExt, SchemeExt};
 use crate::util::Writer;
 use crate::Error;
 
@@ -93,7 +93,7 @@ impl Call<SendRequest> {
             return Ok(None);
         }
 
-        if self.inner.should_send_body {
+        if self.inner.state.writer.has_body() {
             if self.inner.await_100_continue {
                 Ok(Some(SendRequestResult::Await100(Call::wrap(self.inner))))
             } else {
@@ -118,7 +118,15 @@ impl Call<SendRequest> {
             self.inner.state.allow_non_standard_methods,
         )?;
 
-        if !info.req_host_header && self.inner.request.method() != Method::CONNECT {
+        let method = self.inner.request.method();
+        let send_body = (method.allow_request_body() || self.inner.force_send_body)
+            && info.body_mode.has_body();
+
+        if !send_body && info.body_mode.has_body() {
+            return Err(Error::BodyNotAllowed);
+        }
+
+        if !info.req_host_header && method != Method::CONNECT {
             if let Some(host) = self.inner.request.uri().host() {
                 // User did not set a host header, and there is one in uri, we set that.
                 // We need an owned value to set the host header.
@@ -131,18 +139,18 @@ impl Call<SendRequest> {
         }
 
         if let Some(auth) = self.inner.request.uri().authority() {
-            let auth = auth.clone();
-
-            if auth.userinfo().is_some() && !info.req_auth_header {
-                let user = auth.username().unwrap_or_default();
-                let pass = auth.password().unwrap_or_default();
-                let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
-                let auth = format!("Basic {}", creds);
-                self.inner.request.set_header(header::AUTHORIZATION, auth)?;
-            }
-
-            if self.inner.request.method() == Method::CONNECT {
-                self.inner.request.set_header(header::HOST, auth.as_str())?;
+            if self.inner.request.method() != Method::CONNECT {
+                if auth.userinfo().is_some() && !info.req_auth_header {
+                    let user = auth.username().unwrap_or_default();
+                    let pass = auth.password().unwrap_or_default();
+                    let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
+                    let auth = format!("Basic {}", creds);
+                    self.inner.request.set_header(header::AUTHORIZATION, auth)?;
+                }
+            } else if !info.req_host_header {
+                self.inner
+                    .request
+                    .set_header(header::HOST, auth.clone().as_str())?;
             }
         }
 
