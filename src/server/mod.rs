@@ -195,7 +195,7 @@ use amended::AmendedResponse;
 use http::{Method, Response, StatusCode, Version};
 
 use crate::body::{BodyReader, BodyWriter};
-use crate::ext::StatusCodeExt;
+use crate::ext::{MethodExt, StatusCodeExt};
 use crate::util::Writer;
 use crate::{ArrayVec, CloseReason};
 
@@ -348,10 +348,10 @@ mod send100;
 /// to a state that will send a response.
 fn append_request(inner: Inner, response: Response<()>) -> Inner {
     // unwrap is ok because method is set early.
-    let is_head = inner.method.as_ref().unwrap() == Method::HEAD;
-    let is_connect = inner.method.as_ref().unwrap() == Method::CONNECT;
+    let method_allows_body = inner.method.as_ref().unwrap().allow_response_body();
+    let status_allows_body = response.status().body_allowed();
 
-    let default_body_mode = if !(is_head || is_connect) && response.status().body_allowed() {
+    let default_body_mode = if method_allows_body && status_allows_body {
         BodyWriter::new_chunked()
     } else {
         BodyWriter::new_none()
