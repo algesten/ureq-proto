@@ -101,14 +101,8 @@ fn try_write_prelude_part(
             let all = response.headers();
             let skipped = all.skip(*index);
 
-            if header_count > 0 {
-                do_write_headers(skipped, index, header_count - 1, w);
-            } else {
-                // if no headers the final carriage return will be skipped so write it here to end prelude
-                let _ = write!(w, "\r\n");
-            }
-
-            if *index == header_count {
+            do_write_headers(skipped, index, w);
+            if *index == header_count && w.try_write(|w| write!(w, "\r\n")) {
                 *phase = ResponsePhase::Body;
             }
             false
@@ -119,7 +113,7 @@ fn try_write_prelude_part(
     }
 }
 
-fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
+fn do_write_headers<'a, I>(headers: I, index: &mut usize, w: &mut Writer)
 where
     I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
 {
@@ -129,9 +123,6 @@ where
             w.write_all(h.1.as_bytes())?;
             write!(w, "\r\n")?;
 
-            if *index == last_index {
-                write!(w, "\r\n")?;
-            }
             Ok(())
         });
 
