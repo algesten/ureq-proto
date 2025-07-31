@@ -25,6 +25,8 @@ impl Reply<RecvRequest> {
             state: super::BodyState::default(),
             response: None,
             close_reason,
+            force_recv_body: false,
+            force_send_body: false,
             method: None,
             expect_100: false,
             expect_100_reject: false,
@@ -101,7 +103,8 @@ impl Reply<RecvRequest> {
             None
         };
 
-        let reader = BodyReader::for_request(http10, method, &header_lookup)?;
+        let reader =
+            BodyReader::for_request(http10, method, self.inner.force_recv_body, &header_lookup)?;
         self.inner.state.reader = Some(reader);
 
         Ok(Some((input_used, request)))
@@ -141,5 +144,14 @@ impl Reply<RecvRequest> {
         } else {
             Some(RecvRequestResult::ProvideResponse(Reply::wrap(self.inner)))
         }
+    }
+
+    /// Convert the state to receive a body despite method.
+    ///
+    /// Methods like HEAD and CONNECT should not have attached bodies.
+    /// Some broken APIs use bodies anyway and this is an escape hatch to
+    /// interoperate with such services.
+    pub fn force_recv_body(&mut self) {
+        self.inner.force_recv_body = true;
     }
 }
