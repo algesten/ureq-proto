@@ -1,5 +1,6 @@
 use http::{header, Response};
 
+use crate::ext::MethodExt;
 use crate::{CloseReason, Error};
 
 use super::state::{ProvideResponse, SendResponse};
@@ -33,7 +34,9 @@ impl Reply<ProvideResponse> {
         let writer = inner.state.writer.take().unwrap();
         let info = response.analyze(writer)?;
 
-        if !info.res_body_header && info.body_mode.has_body() {
+        let allow_body = inner.method.as_ref().unwrap().allow_response_body();
+
+        if !info.res_body_header && info.body_mode.has_body() && allow_body {
             // User did not set a body header, we set one.
             let header = info.body_mode.body_header();
             response.set_header(header.0, header.1)?;
