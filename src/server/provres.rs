@@ -1,10 +1,11 @@
-use http::{header, Response};
+use http::{header, HeaderName, Response};
 
+use crate::body::{response_body_allowed, BodyReader};
 use crate::ext::MethodExt;
 use crate::{CloseReason, Error};
 
 use super::state::{ProvideResponse, SendResponse};
-use super::{append_request, Reply};
+use super::{append_request, BodyState, Reply};
 
 impl Reply<ProvideResponse> {
     /// Provide a response to the client's request.
@@ -34,9 +35,23 @@ impl Reply<ProvideResponse> {
         let writer = inner.state.writer.take().unwrap();
         let info = response.analyze(writer)?;
 
-        let allow_body = inner.method.as_ref().unwrap().allow_response_body();
+        let body_provided = info.body_mode.has_body();
 
-        if !info.res_body_header && info.body_mode.has_body() && allow_body {
+        let (_, status) = response.prelude();
+        let status = status.into();
+        let method = inner.method.as_ref().unwrap();
+
+        let body_allowed = response_body_allowed(method, status, info.body_mode.body_mode());
+        let force_send = inner.should_send_body;
+
+        let should_send_body = body_allowed || force_send;
+
+        if body_provided && !should_send_body {
+            // User set a body header but method does not allow one
+            return Err(Error::BodyNotAllowed);
+        }
+
+        if body_provided && !info.res_body_header && should_send_body {
             // User did not set a body header, we set one.
             let header = info.body_mode.body_header();
             response.set_header(header.0, header.1)?;
@@ -45,5 +60,10 @@ impl Reply<ProvideResponse> {
         inner.state.writer = Some(info.body_mode);
 
         Ok(Reply::wrap(inner))
+    }
+
+    /// TODO
+    pub fn force_send_body(&mut self) {
+        self.inner.should_send_body = true;
     }
 }

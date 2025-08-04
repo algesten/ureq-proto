@@ -7,7 +7,7 @@ use crate::util::log_data;
 use crate::Error;
 
 use super::state::RecvResponse;
-use super::MAX_RESPONSE_HEADERS;
+use super::{BodyState, MAX_RESPONSE_HEADERS};
 use super::{Call, CloseReason, RecvResponseResult};
 
 impl Call<RecvResponse> {
@@ -180,6 +180,19 @@ impl Call<RecvResponse> {
             } else {
                 RecvResponseResult::Cleanup(Call::wrap(self.inner))
             })
+        }
+    }
+
+    /// Convert the state to receive a body despite method.
+    ///
+    /// Methods like HEAD and CONNECT should not have attached bodies.
+    /// Some broken APIs use bodies anyway and this is an escape hatch to
+    /// interoperate with such services.
+    pub fn recv_body_despite_method(&mut self) {
+        self.inner.should_recv_body = true;
+        self.inner.state = BodyState {
+            reader: Some(todo!()),
+            ..Default::default()
         }
     }
 }

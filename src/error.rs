@@ -21,6 +21,7 @@ pub enum Error {
     ChunkExpectedCrLf,
     BodyContentAfterFinish,
     BodyLargerThanContentLength,
+    BodyNotAllowed,
     HttpParseFail(String),
     HttpParseTooManyHeaders,
     NoLocationHeader,
@@ -60,6 +61,9 @@ impl fmt::Display for Error {
             }
             Error::BodyLargerThanContentLength => {
                 write!(f, "attempt to write larger body than content-length")
+            }
+            Error::BodyNotAllowed => {
+                write!(f, "body not allowed by method")
             }
             Error::HttpParseFail(v) => write!(f, "http parse fail: {}", v),
             Error::HttpParseTooManyHeaders => write!(f, "http parse resulted in too many headers"),

@@ -153,8 +153,13 @@ impl AmendedRequest {
         }
 
         let count_len = self.headers_get_all(header::CONTENT_LENGTH).count();
+        let count_transfer = self.headers_get_all(header::TRANSFER_ENCODING).count();
         if count_len > 1 {
             return Err(Error::TooManyContentLengthHeaders);
+        }
+
+        if (count_len != 0 || count_transfer != 0) && !m.allow_request_body() {
+            return Err(Error::BodyNotAllowed);
         }
 
         let mut req_host_header = false;

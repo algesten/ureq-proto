@@ -234,6 +234,8 @@ pub(crate) struct Inner {
     pub state: BodyState,
     pub response: Option<AmendedResponse>,
     pub close_reason: ArrayVec<CloseReason, 4>,
+    pub should_recv_body: bool,
+    pub should_send_body: bool,
     pub method: Option<Method>,
     pub expect_100: bool,
     pub expect_100_reject: bool,
@@ -348,7 +350,7 @@ mod send100;
 /// to a state that will send a response.
 fn append_request(inner: Inner, response: Response<()>) -> Inner {
     // unwrap is ok because method is set early.
-    let method_allows_body = inner.method.as_ref().unwrap().allow_response_body();
+    let method_allows_body = inner.method.as_ref().unwrap().allow_request_body();
     let status_allows_body = response.status().body_allowed();
 
     let default_body_mode = if method_allows_body && status_allows_body {
@@ -364,6 +366,8 @@ fn append_request(inner: Inner, response: Response<()>) -> Inner {
             ..inner.state
         },
         response: Some(AmendedResponse::new(response)),
+        should_recv_body: inner.should_recv_body,
+        should_send_body: inner.should_send_body,
         close_reason: inner.close_reason,
         method: inner.method,
         expect_100: inner.expect_100,
@@ -586,7 +590,7 @@ mod tests {
     }
 
     #[test]
-    fn response_without_body() {
+    fn head_response_with_body_fails() {
         let mut reply = Reply::new().unwrap();
 
         // Receive HEAD request
@@ -613,6 +617,40 @@ mod tests {
             .body(())
             .unwrap();
 
+        reply
+            .provide(response)
+            .expect_err("no body allowed on HEAD response");
+    }
+
+    #[test]
+    fn head_response_with_body_and_footgun() {
+        let mut reply = Reply::new().unwrap();
+
+        // Receive HEAD request
+        let input = b"HEAD /status HTTP/1.1\r\n\
+            host: test.local\r\n\
+            \r\n";
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 43); // Verify exact bytes consumed
+        assert_eq!(request.method(), "HEAD");
+        assert_eq!(request.uri().path(), "/status");
+
+        // Go to ProvideResponse
+        let reply = reply.proceed().unwrap();
+        let RecvRequestResult::ProvideResponse(mut reply) = reply else {
+            panic!("Expected ProvideResponse state");
+        };
+
+        // Provide a response
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", "1000") // Even with content-length
+            .body(())
+            .unwrap();
+
+        reply.force_send_body();
         let mut reply = reply.provide(response).unwrap();
 
         // Write response headers
@@ -885,47 +923,7 @@ mod tests {
     }
 
     #[test]
-    fn connect_flow_with_body_headers_is_ok() {
-        let mut reply = Reply::new().unwrap();
-
-        let input =
-            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
-
-        let (input_used, request) = reply.try_request(input).unwrap();
-        let request = request.unwrap();
-
-        assert_eq!(input_used, 73);
-        assert_eq!(request.method(), "CONNECT");
-        assert_eq!(request.uri().path(), "");
-
-        // Should go to ProvideReponse state (content-length/transfer-encoding is ignored with CONNECT)
-        let RecvRequestResult::ProvideResponse(reply) = reply.proceed().unwrap() else {
-            panic!("Expected ProvideResponse state");
-        };
-
-        let response = Response::builder()
-            .status(StatusCode::OK)
-            .header("content-length", 1024)
-            .body(())
-            .unwrap();
-
-        let mut reply = reply.provide(response).unwrap();
-
-        let mut output = vec![0_u8; 1024];
-        let n = reply.write(&mut output).unwrap();
-
-        // Response should ignore provided content-length/transfer-encoding headers
-        let s = str::from_utf8(&output[..n]).unwrap();
-        assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
-
-        // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
-        let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
-            panic!("Expected Cleanup state")
-        };
-    }
-
-    #[test]
-    fn connect_flow_without_body_headers_is_ok() {
+    fn connect() {
         let mut reply = Reply::new().unwrap();
 
         let input = b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\n\r\n";
@@ -954,6 +952,99 @@ mod tests {
         assert_eq!(s, "HTTP/1.1 200 OK\r\n\r\n");
 
         // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
+            panic!("Expected Cleanup state")
+        };
+    }
+
+    // TODO: make "force_read_body" (and "force_send_body") some sort of builder otherwise order of operations can cause failures
+    #[test]
+    fn force_read_connect_request_body() {
+        let mut reply = Reply::new().unwrap();
+        reply.force_read_body();
+
+        let input =
+            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
+
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 73);
+        assert_eq!(request.method(), "CONNECT");
+        assert_eq!(request.uri().path(), "");
+
+        // Should go to RecvBody state (body reading footgun was enabled)
+        let RecvRequestResult::RecvBody(reply) = reply.proceed().unwrap() else {
+            panic!("Expected RecvBody state");
+        };
+    }
+
+    #[test]
+    fn connect_with_response_body_headers_fails() {
+        let mut reply = Reply::new().unwrap();
+
+        let input =
+            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
+
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 73);
+        assert_eq!(request.method(), "CONNECT");
+        assert_eq!(request.uri().path(), "");
+
+        // Should go to ProvideReponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvRequestResult::ProvideResponse(reply) = reply.proceed().unwrap() else {
+            panic!("Expected ProvideResponse state");
+        };
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        reply
+            .provide(response)
+            .expect_err("no body allowed on CONNECT response");
+    }
+
+    #[test]
+    fn connect_with_response_body_headers_and_footgun() {
+        let mut reply = Reply::new().unwrap();
+
+        let input =
+            b"CONNECT example.com HTTP/1.1\r\nhost: example.com\r\ncontent-length: 1024\r\n\r\n";
+
+        let (input_used, request) = reply.try_request(input).unwrap();
+        let request = request.unwrap();
+
+        assert_eq!(input_used, 73);
+        assert_eq!(request.method(), "CONNECT");
+        assert_eq!(request.uri().path(), "");
+
+        // Should go to ProvideReponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvRequestResult::ProvideResponse(mut reply) = reply.proceed().unwrap() else {
+            panic!("Expected ProvideResponse state");
+        };
+
+        let response = Response::builder()
+            .status(StatusCode::OK)
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        reply.force_send_body();
+        let mut reply = reply.provide(response).unwrap();
+
+        let mut output = vec![0_u8; 1024];
+        let n = reply.write(&mut output).unwrap();
+
+        // Response should ignore provided content-length/transfer-encoding headers
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
+
+        // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
         let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
             panic!("Expected Cleanup state")
         };

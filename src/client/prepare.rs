@@ -26,6 +26,7 @@ impl Call<Prepare> {
         }
 
         let should_send_body = request.method().need_request_body();
+        let should_recv_body = false;
         let await_100_continue = request.headers().iter().has_expect_100();
 
         let request = AmendedRequest::new(request);
@@ -45,6 +46,7 @@ impl Call<Prepare> {
             },
             close_reason,
             should_send_body,
+            should_recv_body,
             await_100_continue,
             status: None,
             location: None,

@@ -300,6 +300,7 @@ pub(crate) struct Inner {
     pub analyzed: bool,
     pub state: BodyState,
     pub close_reason: ArrayVec<CloseReason, 4>,
+    pub should_recv_body: bool,
     pub should_send_body: bool,
     pub await_100_continue: bool,
     pub status: Option<StatusCode>,
@@ -1237,7 +1238,7 @@ mod tests {
     }
 
     #[test]
-    fn connect_flow_without_body_headers_is_ok() {
+    fn connect() {
         let req = Request::builder()
             .method(Method::CONNECT)
             .uri("http://example.com:80")
@@ -1279,7 +1280,7 @@ mod tests {
     }
 
     #[test]
-    fn connect_flow_with_body_headers_is_ok() {
+    fn connect_with_body_headers_fails() {
         let req = Request::builder()
             .method(Method::CONNECT)
             .uri("http://example.com:80")
@@ -1291,39 +1292,24 @@ mod tests {
         let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
-        let n = call.write(&mut output).unwrap();
+        call.write(&mut output)
+            .expect_err("no body allowed on CONNECT request");
+    }
 
-        // CONNECT request should have request target in authority form
-        let s = str::from_utf8(&output[..n]).unwrap();
-        assert_eq!(
-            s,
-            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length: 1024\r\n\r\n"
-        );
+    #[test]
+    fn connect_with_body_headers_and_footgun() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
 
-        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
-        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
-            panic!("Expected RecvResponse state")
-        };
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
 
-        let input = b"HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n";
-        let (n, res) = call.try_response(input, false).unwrap();
-        assert_eq!(n, 41);
-
-        let Some(res) = res else {
-            panic!("`try_response()` should return a response");
-        };
-
-        assert_eq!(
-            res.headers()
-                .get(header::CONTENT_LENGTH)
-                .map(|v| v.to_str().unwrap())
-                .unwrap(),
-            "1024"
-        );
-
-        // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
-        let RecvResponseResult::Cleanup(_call) = call.proceed().unwrap() else {
-            panic!("Expected Cleanup state")
-        };
+        let mut output = vec![0; 1024];
+        call.write(&mut output)
+            .expect_err("no body allowed on CONNECT request");
     }
 }
