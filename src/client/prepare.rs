@@ -44,8 +44,8 @@ impl Call<Prepare> {
                 ..Default::default()
             },
             close_reason,
-            should_send_body: false,
-            should_recv_body: false,
+            force_send_body: false,
+            force_recv_body: false,
             await_100_continue,
             status: None,
             location: None,
@@ -98,7 +98,7 @@ impl Call<Prepare> {
     /// Some broken APIs use bodies anyway, and this is an escape hatch to
     /// interoperate with such services.
     pub fn force_send_body(&mut self) {
-        self.inner.should_send_body = true;
+        self.inner.force_send_body = true;
     }
 
     /// Continue to the next call state.

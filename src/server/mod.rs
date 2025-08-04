@@ -265,16 +265,6 @@ pub(crate) struct BodyState {
     stop_on_chunk_boundary: bool,
 }
 
-impl BodyState {
-    pub(crate) fn need_response_body(&self, method: &Method) -> bool {
-        // HEAD requests never have a body, regardless of what the writer says
-        if *method == Method::HEAD || *method == Method::CONNECT {
-            return false;
-        }
-        // unwrap is ok because we only use this after the writer is set.
-        self.writer.as_ref().unwrap().has_body()
-    }
-}
 #[doc(hidden)]
 pub mod state {
     pub(crate) trait Named {
@@ -959,7 +949,7 @@ mod tests {
 
     // TODO: make "force_read_body" (and "force_send_body") some sort of builder otherwise order of operations can cause failures
     #[test]
-    fn force_read_connect_request_body() {
+    fn connect_read_body() {
         let mut reply = Reply::new().unwrap();
         reply.force_read_body();
 
@@ -977,10 +967,12 @@ mod tests {
         let RecvRequestResult::RecvBody(reply) = reply.proceed().unwrap() else {
             panic!("Expected RecvBody state");
         };
+
+        todo!()
     }
 
     #[test]
-    fn connect_with_response_body_headers_fails() {
+    fn connect_send_body_fails() {
         let mut reply = Reply::new().unwrap();
 
         let input =
@@ -1010,7 +1002,7 @@ mod tests {
     }
 
     #[test]
-    fn connect_with_response_body_headers_and_footgun() {
+    fn connect_send_body_with_footgun() {
         let mut reply = Reply::new().unwrap();
 
         let input =
@@ -1040,13 +1032,13 @@ mod tests {
         let mut output = vec![0_u8; 1024];
         let n = reply.write(&mut output).unwrap();
 
-        // Response should ignore provided content-length/transfer-encoding headers
         let s = str::from_utf8(&output[..n]).unwrap();
         assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
 
-        // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
         let SendResponseResult::SendBody(mut reply) = reply.proceed() else {
             panic!("Expected SendBody state")
         };
+
+        todo!()
     }
 }

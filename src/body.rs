@@ -275,14 +275,12 @@ impl BodyReader {
     pub fn for_request<'a>(
         http10: bool,
         method: &Method,
-        force_read: bool,
+        force_send: bool,
         header_lookup: &'a dyn Fn(http::HeaderName) -> Option<&'a str>,
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        println!("Force: {force_read}");
-
-        if !method.allow_request_body() && !force_read {
+        if !method.allow_request_body() && !force_send {
             return Ok(Self::NoBody);
         }
 
@@ -302,6 +300,7 @@ impl BodyReader {
         http10: bool,
         method: &Method,
         status_code: u16,
+        force_recv: bool,
         header_lookup: &'a dyn Fn(HeaderName) -> Option<&'a str>,
     ) -> Result<Self, Error> {
         let header_defined =
@@ -309,7 +308,7 @@ impl BodyReader {
 
         let body_allowed = response_body_allowed(method, status_code, header_defined.body_mode());
 
-        if !body_allowed {
+        if !body_allowed && !force_recv {
             return Ok(Self::NoBody);
         }
 

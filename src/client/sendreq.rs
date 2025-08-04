@@ -119,7 +119,7 @@ impl Call<SendRequest> {
         )?;
 
         let method = self.inner.request.method();
-        let send_body = (method.allow_request_body() || self.inner.should_send_body)
+        let send_body = (method.allow_request_body() || self.inner.force_send_body)
             && info.body_mode.has_body();
 
         if !send_body && info.body_mode.has_body() {

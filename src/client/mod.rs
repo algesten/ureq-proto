@@ -300,8 +300,8 @@ pub(crate) struct Inner {
     pub analyzed: bool,
     pub state: BodyState,
     pub close_reason: ArrayVec<CloseReason, 4>,
-    pub should_recv_body: bool,
-    pub should_send_body: bool,
+    pub force_recv_body: bool,
+    pub force_send_body: bool,
     pub await_100_continue: bool,
     pub status: Option<StatusCode>,
     pub location: Option<HeaderValue>,
@@ -1284,7 +1284,49 @@ mod tests {
     }
 
     #[test]
-    fn connect_with_body_headers_fails() {
+    fn connect_read_body() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected RecvResponse state")
+        };
+
+        call.force_recv_body();
+
+        let input = b"HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n";
+        let (n, res) = call.try_response(input, false).unwrap();
+
+        let Some(res) = res else {
+            panic!("`try_response()` should return a response");
+        };
+
+        let RecvResponseResult::RecvBody(mut call) = call.proceed().unwrap() else {
+            panic!("Expect RecvBody state");
+        };
+
+        todo!()
+    }
+
+    #[test]
+    fn connect_send_body_fails() {
         let req = Request::builder()
             .method(Method::CONNECT)
             .uri("http://example.com:80")
@@ -1301,7 +1343,7 @@ mod tests {
     }
 
     #[test]
-    fn connect_with_body_headers_and_footgun() {
+    fn connect_send_body_with_footgun() {
         let req = Request::builder()
             .method(Method::CONNECT)
             .uri("http://example.com:80")
@@ -1324,9 +1366,10 @@ mod tests {
             "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length: 1024\r\n\r\n"
         );
 
-        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
         let SendRequestResult::SendBody(mut call) = call.proceed().unwrap().unwrap() else {
             panic!("Expected SendBody state")
         };
+
+        todo!()
     }
 }
