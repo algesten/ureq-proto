@@ -234,8 +234,8 @@ pub(crate) struct Inner {
     pub state: BodyState,
     pub response: Option<AmendedResponse>,
     pub close_reason: ArrayVec<CloseReason, 4>,
-    pub should_recv_body: bool,
-    pub should_send_body: bool,
+    pub force_recv_body: bool,
+    pub force_send_body: bool,
     pub method: Option<Method>,
     pub expect_100: bool,
     pub expect_100_reject: bool,
@@ -366,8 +366,8 @@ fn append_request(inner: Inner, response: Response<()>) -> Inner {
             ..inner.state
         },
         response: Some(AmendedResponse::new(response)),
-        should_recv_body: inner.should_recv_body,
-        should_send_body: inner.should_send_body,
+        force_recv_body: inner.force_recv_body,
+        force_send_body: inner.force_send_body,
         close_reason: inner.close_reason,
         method: inner.method,
         expect_100: inner.expect_100,
@@ -1045,8 +1045,8 @@ mod tests {
         assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
 
         // should go to Cleanup state (content-length/transfer-encoding) is ignored with CONNECT)
-        let SendResponseResult::Cleanup(_reply) = reply.proceed() else {
-            panic!("Expected Cleanup state")
+        let SendResponseResult::SendBody(mut reply) = reply.proceed() else {
+            panic!("Expected SendBody state")
         };
     }
 }

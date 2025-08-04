@@ -14,7 +14,7 @@ fn proceed_without_100_continue() {
     assert!(call.can_keep_await_100());
 
     let inner = call.inner();
-    assert!(inner.should_send_body);
+    assert!(inner.state.writer.has_body());
     assert!(inner.close_reason.is_empty());
 
     match call.proceed() {
@@ -39,7 +39,7 @@ fn proceed_after_100_continue() {
     assert!(!call.can_keep_await_100());
 
     let inner = call.inner();
-    assert!(inner.should_send_body);
+    assert!(inner.state.writer.has_body());
     assert!(inner.close_reason.is_empty());
 
     match call.proceed() {

@@ -586,11 +586,15 @@ mod tests {
 
     #[test]
     fn head_with_body_despite_method() {
-        let req = Request::head("http://foo.test/page").body(()).unwrap();
+        let req = Request::head("http://foo.fest/page")
+            .header(header::TRANSFER_ENCODING, "chunked")
+            .body(())
+            .unwrap();
+
         let mut call = Call::new(req).unwrap();
 
         // Force sending a body despite the method
-        call.send_body_despite_method();
+        call.force_send_body();
 
         let mut call = call.proceed();
 
@@ -1305,11 +1309,24 @@ mod tests {
             .body(())
             .unwrap();
 
-        let call = Call::new(req).unwrap();
+        let mut call = Call::new(req).unwrap();
+
+        call.force_send_body();
         let mut call = call.proceed();
 
         let mut output = vec![0; 1024];
-        call.write(&mut output)
-            .expect_err("no body allowed on CONNECT request");
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length: 1024\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::SendBody(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected SendBody state")
+        };
     }
 }

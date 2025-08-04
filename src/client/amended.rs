@@ -153,13 +153,8 @@ impl AmendedRequest {
         }
 
         let count_len = self.headers_get_all(header::CONTENT_LENGTH).count();
-        let count_transfer = self.headers_get_all(header::TRANSFER_ENCODING).count();
         if count_len > 1 {
             return Err(Error::TooManyContentLengthHeaders);
-        }
-
-        if (count_len != 0 || count_transfer != 0) && !m.allow_request_body() {
-            return Err(Error::BodyNotAllowed);
         }
 
         let mut req_host_header = false;
@@ -189,7 +184,7 @@ impl AmendedRequest {
             .filter_map(|v| v.to_str().ok())
             .any(|v| compare_lowercase_ascii(v, "chunked"));
 
-        let mut req_body_header = false;
+        let req_body_header = has_chunked || content_length.is_some();
 
         // https://datatracker.ietf.org/doc/html/rfc2616#section-4.4
         // Messages MUST NOT include both a Content-Length header field and a
@@ -197,11 +192,9 @@ impl AmendedRequest {
         // identity transfer-coding, the Content-Length MUST be ignored.
         let body_mode = if has_chunked {
             // chunked "wins"
-            req_body_header = true;
             BodyWriter::new_chunked()
         } else if let Some(n) = content_length {
             // user provided content-length second
-            req_body_header = true;
             BodyWriter::new_sized(n)
         } else {
             wanted_mode

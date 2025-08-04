@@ -42,7 +42,7 @@ impl Reply<ProvideResponse> {
         let method = inner.method.as_ref().unwrap();
 
         let body_allowed = response_body_allowed(method, status, info.body_mode.body_mode());
-        let force_send = inner.should_send_body;
+        let force_send = inner.force_send_body;
 
         let should_send_body = body_allowed || force_send;
 
@@ -64,6 +64,6 @@ impl Reply<ProvideResponse> {
 
     /// TODO
     pub fn force_send_body(&mut self) {
-        self.inner.should_send_body = true;
+        self.inner.force_send_body = true;
     }
 }

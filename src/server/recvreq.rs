@@ -25,8 +25,8 @@ impl Reply<RecvRequest> {
             state: super::BodyState::default(),
             response: None,
             close_reason,
-            should_recv_body: false,
-            should_send_body: false,
+            force_recv_body: false,
+            force_send_body: false,
             method: None,
             expect_100: false,
             expect_100_reject: false,
@@ -104,7 +104,7 @@ impl Reply<RecvRequest> {
         };
 
         let reader =
-            BodyReader::for_request(http10, method, self.inner.should_recv_body, &header_lookup)?;
+            BodyReader::for_request(http10, method, self.inner.force_recv_body, &header_lookup)?;
         self.inner.state.reader = Some(reader);
 
         Ok(Some((input_used, request)))
@@ -148,6 +148,6 @@ impl Reply<RecvRequest> {
 
     /// TODO
     pub fn force_read_body(&mut self) {
-        self.inner.should_recv_body = true;
+        self.inner.force_recv_body = true;
     }
 }
