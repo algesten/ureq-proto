@@ -300,7 +300,8 @@ pub(crate) struct Inner {
     pub analyzed: bool,
     pub state: BodyState,
     pub close_reason: ArrayVec<CloseReason, 4>,
-    pub should_send_body: bool,
+    pub force_recv_body: bool,
+    pub force_send_body: bool,
     pub await_100_continue: bool,
     pub status: Option<StatusCode>,
     pub location: Option<HeaderValue>,
@@ -544,7 +545,7 @@ mod tests {
     use crate::client::state::SendRequest;
     use crate::client::Inner;
     use crate::Error;
-    use http::{Method, Request, Version};
+    use http::{header, Method, Request, Version};
     use std::str;
 
     #[test]
@@ -585,11 +586,15 @@ mod tests {
 
     #[test]
     fn head_with_body_despite_method() {
-        let req = Request::head("http://foo.test/page").body(()).unwrap();
+        let req = Request::head("http://foo.fest/page")
+            .header(header::TRANSFER_ENCODING, "chunked")
+            .body(())
+            .unwrap();
+
         let mut call = Call::new(req).unwrap();
 
         // Force sending a body despite the method
-        call.send_body_despite_method();
+        call.force_send_body();
 
         let mut call = call.proceed();
 
@@ -1234,5 +1239,133 @@ mod tests {
         ensure!(AmendedRequest, 400); // 368
         ensure!(Inner, 600); // 512
         ensure!(Call<SendRequest>, 600); // 512
+    }
+
+    #[test]
+    fn connect() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected RecvResponse state")
+        };
+
+        let input = b"HTTP/1.1 200 OK\r\n\r\n";
+        let (n, res) = call.try_response(input, false).unwrap();
+        assert_eq!(n, 19);
+
+        let Some(res) = res else {
+            panic!("`try_response()` should return a response");
+        };
+
+        assert!(res.headers().is_empty());
+
+        // should go to Cleanup state (content-length/transfer-encoding is ignored with CONNECT)
+        let RecvResponseResult::Cleanup(_call) = call.proceed().unwrap() else {
+            panic!("Expected Cleanup state")
+        };
+    }
+
+    #[test]
+    fn connect_read_body() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\n\r\n"
+        );
+
+        // Should go to RecvResponse state (content-length/transfer-encoding is ignored with CONNECT)
+        let SendRequestResult::RecvResponse(mut call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected RecvResponse state")
+        };
+
+        call.force_recv_body();
+
+        let input = b"HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n";
+        let (_n, res) = call.try_response(input, false).unwrap();
+
+        let Some(_res) = res else {
+            panic!("`try_response()` should return a response");
+        };
+
+        let RecvResponseResult::RecvBody(_call) = call.proceed().unwrap() else {
+            panic!("Expect RecvBody state");
+        };
+    }
+
+    #[test]
+    fn connect_send_body_fails() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        call.write(&mut output)
+            .expect_err("no body allowed on CONNECT request");
+    }
+
+    #[test]
+    fn connect_send_body_with_footgun() {
+        let req = Request::builder()
+            .method(Method::CONNECT)
+            .uri("http://example.com:80")
+            .header("content-length", 1024)
+            .body(())
+            .unwrap();
+
+        let mut call = Call::new(req).unwrap();
+
+        call.force_send_body();
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+
+        // CONNECT request should have request target in authority form
+        let s = str::from_utf8(&output[..n]).unwrap();
+        assert_eq!(
+            s,
+            "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length: 1024\r\n\r\n"
+        );
+
+        let SendRequestResult::SendBody(_call) = call.proceed().unwrap().unwrap() else {
+            panic!("Expected SendBody state")
+        };
     }
 }

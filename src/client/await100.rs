@@ -1,5 +1,6 @@
 use http::StatusCode;
 
+use crate::body::BodyWriter;
 use crate::parser::try_parse_response;
 use crate::Error;
 
@@ -37,7 +38,7 @@ impl Call<Await100> {
 
                     if response.status() == StatusCode::CONTINUE {
                         // should_send_body ought to be true since initialization.
-                        assert!(self.inner.should_send_body);
+                        assert!(self.inner.state.writer.has_body());
                         Ok(input_used)
                     } else {
                         // We encountered a status line, without headers, but it wasn't 100,
@@ -45,7 +46,7 @@ impl Call<Await100> {
                         // reuse the connection.
                         // https://curl.se/mail/lib-2004-08/0002.html
                         self.inner.close_reason.push(CloseReason::Not100Continue);
-                        self.inner.should_send_body = false;
+                        self.inner.state.writer = BodyWriter::new_none();
                         Ok(0)
                     }
                 }
@@ -64,7 +65,7 @@ impl Call<Await100> {
                     // We do however want to receive the response to be able to provide
                     // the Response<()> to the user. Hence this is not considered an error.
                     self.inner.close_reason.push(CloseReason::Not100Continue);
-                    self.inner.should_send_body = false;
+                    self.inner.state.writer = BodyWriter::new_none();
                     Ok(0)
                 } else {
                     Err(e)
@@ -87,7 +88,7 @@ impl Call<Await100> {
     pub fn proceed(self) -> Result<Await100Result, Error> {
         // We can always proceed out of Await100
 
-        if self.inner.should_send_body {
+        if self.inner.state.writer.has_body() {
             // TODO(martin): do i need this?
             // call.inner.call.analyze_request()?;
             let call = Call::wrap(self.inner);

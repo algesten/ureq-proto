@@ -129,7 +129,7 @@ fn send_body_despite_method() {
 
     let mut call = scenario.to_prepare();
 
-    call.send_body_despite_method();
+    call.force_send_body();
 
     let mut call = call.proceed();
 

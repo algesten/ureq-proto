@@ -55,14 +55,18 @@ impl AmendedRequest {
 
     pub fn prelude(&self) -> (&Method, &str, Version) {
         let r = &self.request;
-        (
-            r.method(),
+
+        let target = if r.method() == Method::CONNECT {
+            // unwrap allowed as previous code returns error if no authority exists for CONNECT request
+            self.uri().authority().unwrap().as_str()
+        } else {
             self.uri()
                 .path_and_query()
                 .map(|p| p.as_str())
-                .unwrap_or("/"),
-            r.version(),
-        )
+                .unwrap_or("/")
+        };
+
+        (r.method(), target, r.version())
     }
 
     pub fn set_header<K, V>(&mut self, name: K, value: V) -> Result<(), Error>
@@ -180,7 +184,7 @@ impl AmendedRequest {
             .filter_map(|v| v.to_str().ok())
             .any(|v| compare_lowercase_ascii(v, "chunked"));
 
-        let mut req_body_header = false;
+        let req_body_header = has_chunked || content_length.is_some();
 
         // https://datatracker.ietf.org/doc/html/rfc2616#section-4.4
         // Messages MUST NOT include both a Content-Length header field and a
@@ -188,11 +192,9 @@ impl AmendedRequest {
         // identity transfer-coding, the Content-Length MUST be ignored.
         let body_mode = if has_chunked {
             // chunked "wins"
-            req_body_header = true;
             BodyWriter::new_chunked()
         } else if let Some(n) = content_length {
             // user provided content-length second
-            req_body_header = true;
             BodyWriter::new_sized(n)
         } else {
             wanted_mode

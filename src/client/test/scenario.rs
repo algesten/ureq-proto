@@ -72,7 +72,7 @@ impl Scenario {
         // Write the prelude and discard
         call.write(&mut vec![0; 1024]).unwrap();
 
-        if call.inner().should_send_body {
+        if call.inner().state.writer.has_body() {
             let mut call = if call.inner().await_100_continue {
                 // Go via Await100
                 let call = match call.proceed() {
