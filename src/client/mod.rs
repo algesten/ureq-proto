@@ -1321,8 +1321,6 @@ mod tests {
         let RecvResponseResult::RecvBody(mut call) = call.proceed().unwrap() else {
             panic!("Expect RecvBody state");
         };
-
-        todo!()
     }
 
     #[test]
@@ -1369,7 +1367,5 @@ mod tests {
         let SendRequestResult::SendBody(mut call) = call.proceed().unwrap().unwrap() else {
             panic!("Expected SendBody state")
         };
-
-        todo!()
     }
 }

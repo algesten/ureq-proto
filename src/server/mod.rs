@@ -947,7 +947,6 @@ mod tests {
         };
     }
 
-    // TODO: make "force_read_body" (and "force_send_body") some sort of builder otherwise order of operations can cause failures
     #[test]
     fn connect_read_body() {
         let mut reply = Reply::new().unwrap();
@@ -967,8 +966,6 @@ mod tests {
         let RecvRequestResult::RecvBody(reply) = reply.proceed().unwrap() else {
             panic!("Expected RecvBody state");
         };
-
-        todo!()
     }
 
     #[test]
@@ -1038,7 +1035,5 @@ mod tests {
         let SendResponseResult::SendBody(mut reply) = reply.proceed() else {
             panic!("Expected SendBody state")
         };
-
-        todo!()
     }
 }

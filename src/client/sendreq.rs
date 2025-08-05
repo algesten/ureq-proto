@@ -139,19 +139,18 @@ impl Call<SendRequest> {
         }
 
         if let Some(auth) = self.inner.request.uri().authority() {
-            // TODO: remove clone
-            let auth = auth.clone();
-
-            if auth.userinfo().is_some() && !info.req_auth_header {
-                let user = auth.username().unwrap_or_default();
-                let pass = auth.password().unwrap_or_default();
-                let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
-                let auth = format!("Basic {}", creds);
-                self.inner.request.set_header(header::AUTHORIZATION, auth)?;
-            }
-
-            if self.inner.request.method() == Method::CONNECT {
-                self.inner.request.set_header(header::HOST, auth.as_str())?;
+            if self.inner.request.method() != Method::CONNECT {
+                if auth.userinfo().is_some() && !info.req_auth_header {
+                    let user = auth.username().unwrap_or_default();
+                    let pass = auth.password().unwrap_or_default();
+                    let creds = BASE64_STANDARD.encode(format!("{}:{}", user, pass));
+                    let auth = format!("Basic {}", creds);
+                    self.inner.request.set_header(header::AUTHORIZATION, auth)?;
+                }
+            } else if !info.req_host_header {
+                self.inner
+                    .request
+                    .set_header(header::HOST, auth.clone().as_str())?;
             }
         }
 
