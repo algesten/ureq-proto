@@ -65,6 +65,11 @@ impl Dechunker {
         matches!(self, Self::Ended)
     }
 
+    #[cfg(feature = "client")]
+    pub fn is_ending(&self) -> bool {
+        matches!(self, Self::Ending)
+    }
+
     fn read_size(&mut self, src: &[u8], pos: &mut Pos) -> Result<bool, Error> {
         let src = &src[pos.index_in..];
 
@@ -212,6 +217,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "client")]
     fn test_dechunk_data() -> Result<(), Error> {
         let mut d = Dechunker::new();
         let mut b = [0; 1024];
@@ -221,10 +227,13 @@ mod test {
         assert_eq!(d.parse_input(b"\r\n", &mut b)?, (2, 0));
         assert_eq!(d.left(), 0);
         assert!(!d.is_ended());
+        assert!(!d.is_ending());
         assert_eq!(d.parse_input(b"0\r\n", &mut b)?, (3, 0));
         assert!(!d.is_ended());
+        assert!(d.is_ending());
         assert_eq!(d.parse_input(b"\r\n", &mut b)?, (2, 0));
         assert!(d.is_ended());
+        assert!(!d.is_ending());
         Ok(())
     }
 

@@ -190,14 +190,16 @@ pub fn try_parse_request<const N: usize>(
         builder = builder.header(h.name, h.value);
     }
 
-    let request = builder.body(()).expect("a valid response");
+    let request = builder
+        .body(())
+        .map_err(|e| Error::HttpParseFail(e.to_string()))?;
 
     Ok(Some((input_used, request)))
 }
 
 #[cfg(test)]
 mod test {
-    use crate::parser::try_parse_response;
+    use crate::parser::{try_parse_request, try_parse_response};
 
     #[test]
     fn ensure_no_half_response() {
@@ -206,5 +208,11 @@ mod test {
             Content-Length: 100\r\n\r\n";
 
         try_parse_response::<0>(bytes.as_bytes()).expect_err("too many headers");
+    }
+
+    #[test]
+    fn error_on_invalid_authority() {
+        let bytes = "GET example\".com HTTP/1.1\r\n\r\n";
+        try_parse_request::<0>(bytes.as_bytes()).expect_err("invalid URI character");
     }
 }

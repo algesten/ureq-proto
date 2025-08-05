@@ -181,6 +181,9 @@ pub(crate) fn calculate_max_input(output_len: usize) -> usize {
     let chunks = output_len / DEFAULT_CHUNK_AND_OVERHEAD;
     let remaining = output_len % DEFAULT_CHUNK_AND_OVERHEAD;
 
+    // We can safely assume remaining is < DEFAULT_CHUNK_AND_OVERHEAD which requires
+    // DEFAULT_CHUNK_HEX number of chars to write. Thus whatever the remaining length is,
+    // it will fit into DEFAULT_CHUNK_HEX + 4 (for the \r\n overhead)
     let tail = remaining.saturating_sub(DEFAULT_CHUNK_OVERHEAD);
 
     chunks * DEFAULT_CHUNK_SIZE + tail
@@ -442,6 +445,14 @@ impl BodyReader {
             BodyReader::Chunked(v) => v.is_ended(),
             #[cfg(feature = "client")]
             BodyReader::CloseDelimited => false,
+        }
+    }
+
+    #[cfg(feature = "client")]
+    pub fn is_ended_chunked(&self) -> bool {
+        match self {
+            BodyReader::Chunked(v) => v.is_ending() || v.is_ended(),
+            _ => false,
         }
     }
 
