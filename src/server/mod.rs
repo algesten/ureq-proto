@@ -963,7 +963,7 @@ mod tests {
         assert_eq!(request.uri().path(), "");
 
         // Should go to RecvBody state (body reading footgun was enabled)
-        let RecvRequestResult::RecvBody(reply) = reply.proceed().unwrap() else {
+        let RecvRequestResult::RecvBody(_reply) = reply.proceed().unwrap() else {
             panic!("Expected RecvBody state");
         };
     }
@@ -1032,7 +1032,7 @@ mod tests {
         let s = str::from_utf8(&output[..n]).unwrap();
         assert_eq!(s, "HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n");
 
-        let SendResponseResult::SendBody(mut reply) = reply.proceed() else {
+        let SendResponseResult::SendBody(_reply) = reply.proceed() else {
             panic!("Expected SendBody state")
         };
     }

@@ -1312,13 +1312,13 @@ mod tests {
         call.force_recv_body();
 
         let input = b"HTTP/1.1 200 OK\r\ncontent-length: 1024\r\n\r\n";
-        let (n, res) = call.try_response(input, false).unwrap();
+        let (_n, res) = call.try_response(input, false).unwrap();
 
-        let Some(res) = res else {
+        let Some(_res) = res else {
             panic!("`try_response()` should return a response");
         };
 
-        let RecvResponseResult::RecvBody(mut call) = call.proceed().unwrap() else {
+        let RecvResponseResult::RecvBody(_call) = call.proceed().unwrap() else {
             panic!("Expect RecvBody state");
         };
     }
@@ -1364,7 +1364,7 @@ mod tests {
             "CONNECT example.com:80 HTTP/1.1\r\nhost: example.com:80\r\ncontent-length: 1024\r\n\r\n"
         );
 
-        let SendRequestResult::SendBody(mut call) = call.proceed().unwrap().unwrap() else {
+        let SendRequestResult::SendBody(_call) = call.proceed().unwrap().unwrap() else {
             panic!("Expected SendBody state")
         };
     }

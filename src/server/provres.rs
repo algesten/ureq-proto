@@ -1,11 +1,10 @@
-use http::{header, HeaderName, Response};
+use http::{header, Response};
 
-use crate::body::{response_body_allowed, BodyReader};
-use crate::ext::MethodExt;
+use crate::body::response_body_allowed;
 use crate::{CloseReason, Error};
 
 use super::state::{ProvideResponse, SendResponse};
-use super::{append_request, BodyState, Reply};
+use super::{append_request, Reply};
 
 impl Reply<ProvideResponse> {
     /// Provide a response to the client's request.

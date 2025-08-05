@@ -7,7 +7,7 @@ use crate::util::log_data;
 use crate::Error;
 
 use super::state::RecvResponse;
-use super::{BodyState, MAX_RESPONSE_HEADERS};
+use super::MAX_RESPONSE_HEADERS;
 use super::{Call, CloseReason, RecvResponseResult};
 
 impl Call<RecvResponse> {
