@@ -54,6 +54,7 @@ impl BodyWriter {
         }
     }
 
+    #[cfg(feature = "server")]
     pub fn body_mode(&self) -> BodyMode {
         match self.mode {
             SenderMode::None => BodyMode::NoBody,
