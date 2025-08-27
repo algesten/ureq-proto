@@ -64,7 +64,11 @@ impl BodyWriter {
     }
 
     pub fn has_body(&self) -> bool {
-        matches!(self.mode, SenderMode::Sized(_) | SenderMode::Chunked)
+        match self.mode {
+            SenderMode::Sized(n) => n > 0,
+            SenderMode::Chunked => true,
+            SenderMode::None => false,
+        }
     }
 
     pub fn is_chunked(&self) -> bool {

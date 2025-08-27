@@ -48,7 +48,11 @@ impl Reply<SendResponse> {
         assert!(self.is_finished());
 
         if let Some(writer) = self.inner.state.writer {
-            if writer.has_body() {
+            // Enter SendBody for both chunked and sized bodies, even when size is 0,
+            // to ensure consistent state progression for explicit body headers.
+            //
+            // TODO(martin): Do we actually want this API wise? Isn't it better to go straight to Cleanup?
+            if writer.is_chunked() || writer.left_to_send().is_some() {
                 return SendResponseResult::SendBody(Reply::wrap(self.inner));
             }
         }
