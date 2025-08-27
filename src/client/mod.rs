@@ -549,6 +549,35 @@ mod tests {
     use std::str;
 
     #[test]
+    fn get_simple() {
+        let req = Request::get("http://foo.test/page")
+            .header("content-length", "0")
+            .body(())
+            .unwrap();
+
+        let call = Call::new(req).unwrap();
+
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        assert_eq!(
+            s,
+            "GET /page HTTP/1.1\r\n\
+            host: foo.test\r\n\
+            content-length: 0\r\n\
+            \r\n"
+        );
+
+        // Since GET has no body (explicitly defined by content-length too) we should go straight to RecvResponse
+        let Ok(Some(SendRequestResult::RecvResponse(_call))) = call.proceed() else {
+            panic!("Exepcted `RecvResponse`")
+        };
+    }
+
+    #[test]
     fn head_simple() {
         let req = Request::head("http://foo.test/page").body(()).unwrap();
         let call = Call::new(req).unwrap();
