@@ -240,7 +240,12 @@ fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &m
 }
 
 fn do_write_send_line(line: (&Method, &str, Version), w: &mut Writer) -> bool {
-    w.try_write(|w| write!(w, "{} {} {:?}\r\n", line.0, line.1, line.2))
+    // Ensure origin-form request-target starts with "/" when only a query is present
+    // per RFC 9112 §3.2.1 (@https://datatracker.ietf.org/doc/html/rfc9112#section-3.2.1).
+    let need_initial_slash = line.1.starts_with('?');
+    let slash = if need_initial_slash { "/" } else { "" };
+
+    w.try_write(|w| write!(w, "{} {}{} {:?}\r\n", line.0, slash, line.1, line.2))
 }
 
 fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)

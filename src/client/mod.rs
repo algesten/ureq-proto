@@ -1397,4 +1397,25 @@ mod tests {
             panic!("Expected SendBody state")
         };
     }
+
+    #[test]
+    fn query_no_slash() {
+        let req = Request::get("http://foo.test?query=foo").body(()).unwrap();
+
+        let call = Call::new(req).unwrap();
+
+        let mut call = call.proceed();
+
+        let mut output = vec![0; 1024];
+        let n = call.write(&mut output).unwrap();
+        let s = str::from_utf8(&output[..n]).unwrap();
+
+        // The added / here is to be compliant with RFC 9112 §3.2.1
+        assert_eq!(
+            s,
+            "GET /?query=foo HTTP/1.1\r\n\
+            host: foo.test\r\n\
+            \r\n"
+        );
+    }
 }
