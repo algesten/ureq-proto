@@ -7,6 +7,7 @@ description = "ureq support crate"
 keywords = ["http", "server", "web"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/algesten/ureq-proto"
+exclude = ["/cargo_deny.sh", "/deny.toml", "/doc/", "/run-fuzz.sh", "/test.sh"]
 
 # MSRV
 rust-version = "1.71.1"
