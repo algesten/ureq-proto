@@ -14,37 +14,23 @@ jobs:
       RUSTFLAGS: -D warnings
     steps:
     - uses: actions/checkout@v2
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        override: true
+        components: rustfmt, clippy
     - name: Run Rustfmt
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: -- --check
+      run: cargo fmt -- --check
     - name: Run Clippy
-      uses: actions-rs/cargo@v1
-      with:
-        command: clippy
+      run: cargo clippy
   doc:
     name: Docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Docs
-        uses: actions-rs/cargo@v1
         env:
           RUSTDOCFLAGS: -Dwarnings
-        with:
-          command: doc
-          args: --no-deps --all-features --document-private-items
+        run: cargo doc --no-deps --all-features --document-private-items
 
   build_versions:
     strategy:
@@ -53,18 +39,11 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
       - uses: Swatinem/rust-cache@v1
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - run: cargo build
 
   build_and_test:
     name: Test
@@ -74,15 +53,9 @@ jobs:
       RUSTFLAGS: "-D dead_code -D unused-variables -D unused"
     steps:
       - uses: actions/checkout@master
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+        run: cargo test
 
   cargo-deny:
     name: cargo-deny
