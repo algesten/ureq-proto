@@ -13,17 +13,12 @@ pub(crate) struct BodyWriter {
     ended: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 enum SenderMode {
+    #[default]
     None,
     Sized(u64),
     Chunked,
-}
-
-impl Default for SenderMode {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 // This is 0x2800 in hex.
