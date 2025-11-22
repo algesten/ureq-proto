@@ -36,13 +36,18 @@ impl Call<RecvResponse> {
             None => return Ok((0, None)),
         };
 
-        if response.status() == StatusCode::CONTINUE && self.inner.await_100_continue {
-            // We have received a "delayed" 100-continue. This means the server did
-            // not produce the 100-continue response in time while we were in the
-            // state Await100. This is not an error, it can happen if the network is slow.
+        if response.status() == StatusCode::CONTINUE {
+            // We have received a 100-continue response. This can happen in two scenarios:
+            // 1. A "delayed" 100-continue when we used Expect: 100-continue but the server
+            //    did not produce the response in time while we were in the Await100 state.
+            // 2. An unsolicited 100-continue from a server that sends it regardless of
+            //    whether the client requested it (e.g., on a regular GET request).
+            //
+            // According to RFC 7231, 100-continue is an informational (1xx) response and
+            // should always be consumed by clients, regardless of whether it was solicited.
             self.inner.await_100_continue = false;
 
-            // We should consume the response and wait for the next.
+            // We consume the response and wait for the actual final response.
             return Ok((input_used, None));
         }
 

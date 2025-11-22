@@ -100,3 +100,33 @@ fn expect_100_without_100_continue() {
     assert!(maybe_response.is_some());
     assert!(call.can_proceed());
 }
+
+#[test]
+fn unsolicited_100_continue_on_get() {
+    // Bug: server sends 100-continue on a regular GET request
+    // without the client sending Expect: 100-continue header.
+    // This reproduces the issue from https://github.com/algesten/ureq/issues/1137
+    let scenario = Scenario::builder().get("https://q.test").build();
+
+    let mut call = scenario.to_recv_response();
+
+    // Server sends unsolicited 100-continue
+    let (input_used, maybe_response) = call
+        .try_response(b"HTTP/1.1 100 Continue\r\n\r\n", true)
+        .unwrap();
+    assert_eq!(input_used, 25);
+    assert!(
+        maybe_response.is_none(),
+        "100-continue should be consumed, not returned"
+    );
+    assert!(!call.can_proceed());
+
+    // Server then sends the actual response
+    let (input_used, maybe_response) = call.try_response(RESPONSE, true).unwrap();
+    assert_eq!(input_used, 66);
+    assert!(maybe_response.is_some());
+    assert!(call.can_proceed());
+
+    let response = maybe_response.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
