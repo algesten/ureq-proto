@@ -36,18 +36,29 @@ impl Call<RecvResponse> {
             None => return Ok((0, None)),
         };
 
-        if response.status() == StatusCode::CONTINUE {
-            // We have received a 100-continue response. This can happen in two scenarios:
-            // 1. A "delayed" 100-continue when we used Expect: 100-continue but the server
-            //    did not produce the response in time while we were in the Await100 state.
-            // 2. An unsolicited 100-continue from a server that sends it regardless of
-            //    whether the client requested it (e.g., on a regular GET request).
-            //
-            // According to RFC 7231, 100-continue is an informational (1xx) response and
-            // should always be consumed by clients, regardless of whether it was solicited.
-            self.inner.await_100_continue = false;
+        // Handle all 1xx informational responses according to RFC 9110.
+        // These can happen in several scenarios:
+        // 1. A "delayed" 100-continue when we used Expect: 100-continue but the server
+        //    did not produce the response in time while we were in the Await100 state.
+        // 2. An unsolicited 1xx response from a server that sends it regardless of
+        //    whether the client requested it (e.g., on a regular GET request).
+        // 3. Other informational responses like 102 Processing or 103 Early Hints.
+        //
+        // According to RFC 9110, all 1xx responses are informational and should be
+        // consumed by clients, with the exception of 101 Switching Protocols.
+        let status = response.status();
 
-            // We consume the response and wait for the actual final response.
+        if status == StatusCode::CONTINUE {
+            // Consume 100 Continue and clear the await flag for delayed 100-continue
+            self.inner.await_100_continue = false;
+            return Ok((input_used, None));
+        } else if status == StatusCode::SWITCHING_PROTOCOLS {
+            // 101 is special: mark connection so it won't be returned to pool,
+            // but return the response to the caller (don't consume it).
+            self.inner.close_reason.push(CloseReason::ProtocolSwitch);
+            // Fall through to return the response
+        } else if status.is_informational() {
+            // Other 1xx (102 Processing, 103 Early Hints, etc.): consume and wait for final response
             return Ok((input_used, None));
         }
 

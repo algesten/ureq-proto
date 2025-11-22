@@ -19,6 +19,12 @@ pub enum CloseReason {
     /// * a 4xx or 5xx response indicating the server cannot receive the body.
     Not100Continue,
 
+    /// Protocol upgrade via 101 Switching Protocols.
+    ///
+    /// The connection is still open but should NOT be returned to the pool
+    /// because it's now using a different protocol (e.g., WebSocket, HTTP/2).
+    ProtocolSwitch,
+
     /// Response body is close delimited.
     ///
     /// We do not know how much body data to receive. The socket will be closed
@@ -32,6 +38,7 @@ impl CloseReason {
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
             CloseReason::Not100Continue => "non-100 response before body",
+            CloseReason::ProtocolSwitch => "protocol switched via 101",
             CloseReason::CloseDelimitedBody => "response body is close delimited",
         }
     }
