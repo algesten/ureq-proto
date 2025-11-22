@@ -34,17 +34,29 @@ impl Call<Await100> {
         match try_parse_response::<0>(input) {
             Ok(v) => match v {
                 Some((input_used, response)) => {
-                    self.inner.await_100_continue = false;
+                    let status = response.status();
 
-                    if response.status() == StatusCode::CONTINUE {
-                        // should_send_body ought to be true since initialization.
+                    if status == StatusCode::CONTINUE {
+                        // Got 100 Continue - proceed to send the body
+                        self.inner.await_100_continue = false;
                         assert!(self.inner.state.writer.has_body());
                         Ok(input_used)
-                    } else {
-                        // We encountered a status line, without headers, but it wasn't 100,
-                        // so we should not continue to send the body. Furthermore we mustn't
-                        // reuse the connection.
+                    } else if status == StatusCode::SWITCHING_PROTOCOLS {
+                        // 101 Switching Protocols - don't send body, mark connection, proceed to recv response
                         // https://curl.se/mail/lib-2004-08/0002.html
+                        self.inner.await_100_continue = false;
+                        self.inner.close_reason.push(CloseReason::ProtocolSwitch);
+                        self.inner.state.writer = BodyWriter::new_none();
+                        Ok(0)
+                    } else if status.is_informational() {
+                        // Other 1xx (102 Processing, 103 Early Hints, etc.)
+                        // Consume transparently and continue waiting for 100 or timeout.
+                        // Do NOT set await_100_continue to false - keep waiting.
+                        Ok(input_used)
+                    } else {
+                        // Non-informational response (2xx-5xx) - don't send body
+                        // https://curl.se/mail/lib-2004-08/0002.html
+                        self.inner.await_100_continue = false;
                         self.inner.close_reason.push(CloseReason::Not100Continue);
                         self.inner.state.writer = BodyWriter::new_none();
                         Ok(0)
