@@ -346,17 +346,12 @@ impl BodyState {
 /// - `SendLine`: Sending the request line (method, path, version)
 /// - `SendHeaders`: Sending the request headers
 /// - `SendBody`: Sending the request body
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum RequestPhase {
+    #[default]
     Line,
     Headers(usize),
     Body,
-}
-
-impl Default for RequestPhase {
-    fn default() -> Self {
-        Self::Line
-    }
 }
 
 impl RequestPhase {
