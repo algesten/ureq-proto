@@ -1,10 +1,10 @@
 use std::fmt;
 
-use http::{header, HeaderName, HeaderValue, Response, StatusCode, Version};
+use http::{HeaderName, HeaderValue, Response, StatusCode, Version, header};
 
+use crate::Error;
 use crate::body::BodyWriter;
 use crate::util::compare_lowercase_ascii;
-use crate::Error;
 
 pub(crate) struct AmendedResponse {
     response: Response<()>,

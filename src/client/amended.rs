@@ -1,12 +1,12 @@
 use std::{fmt, mem};
 
 use http::uri::PathAndQuery;
-use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, header};
 
+use crate::Error;
 use crate::body::BodyWriter;
 use crate::ext::MethodExt;
 use crate::util::compare_lowercase_ascii;
-use crate::Error;
 
 /// `Request` with amends.
 ///

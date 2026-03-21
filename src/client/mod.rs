@@ -226,9 +226,9 @@ use std::marker::PhantomData;
 
 use http::{HeaderValue, StatusCode};
 
+use crate::CloseReason;
 use crate::body::{BodyReader, BodyWriter};
 use crate::util::ArrayVec;
-use crate::CloseReason;
 
 use amended::AmendedRequest;
 
@@ -536,11 +536,11 @@ impl fmt::Debug for RequestPhase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
+    use crate::client::Inner;
     use crate::client::amended::AmendedRequest;
     use crate::client::state::SendRequest;
-    use crate::client::Inner;
-    use crate::Error;
-    use http::{header, Method, Request, Version};
+    use http::{Method, Request, Version, header};
     use std::str;
 
     #[test]

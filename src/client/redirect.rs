@@ -1,8 +1,8 @@
 use http::uri::Scheme;
-use http::{header, Method, StatusCode, Uri};
+use http::{Method, StatusCode, Uri, header};
 
-use crate::ext::{MethodExt, StatusExt};
 use crate::Error;
+use crate::ext::{MethodExt, StatusExt};
 
 use super::state::{Cleanup, Prepare, Redirect};
 use super::{Call, RedirectAuthHeaders};
@@ -33,7 +33,7 @@ impl Call<Redirect> {
             Err(_) => {
                 return Err(Error::BadLocationHeader(
                     String::from_utf8_lossy(header.as_bytes()).to_string(),
-                ))
+                ));
             }
         };
 

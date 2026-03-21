@@ -1,8 +1,8 @@
-use http::{header, Method, Response, StatusCode};
+use http::{Method, Response, StatusCode, header};
 
-use crate::client::test::TestSliceExt;
-use crate::client::RedirectAuthHeaders;
 use crate::Error;
+use crate::client::RedirectAuthHeaders;
+use crate::client::test::TestSliceExt;
 
 use super::scenario::Scenario;
 

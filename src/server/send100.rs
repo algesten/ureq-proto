@@ -1,10 +1,10 @@
 use http::{StatusCode, Version};
 
-use crate::util::Writer;
 use crate::Error;
+use crate::util::Writer;
 
 use super::state::{ProvideResponse, RecvBody, Send100};
-use super::{do_write_send_line, Reply};
+use super::{Reply, do_write_send_line};
 
 impl Reply<Send100> {
     /// Sends a 100 Continue response and proceeds to receiving the body.

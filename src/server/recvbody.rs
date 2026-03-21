@@ -1,7 +1,7 @@
 use crate::{BodyMode, Error};
 
-use super::state::{ProvideResponse, RecvBody};
 use super::Reply;
+use super::state::{ProvideResponse, RecvBody};
 
 impl Reply<RecvBody> {
     /// Read the input as a request body.

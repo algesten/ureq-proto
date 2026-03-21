@@ -1,9 +1,9 @@
+use crate::Error;
 use crate::body::calculate_max_input;
 use crate::util::Writer;
-use crate::Error;
 
-use super::state::{RecvResponse, SendBody};
 use super::Call;
+use super::state::{RecvResponse, SendBody};
 
 impl Call<SendBody> {
     /// Write request body from `input` to `output`.

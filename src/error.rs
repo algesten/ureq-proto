@@ -83,8 +83,8 @@ impl fmt::Display for Error {
 mod tests_client {
     use super::*;
     use crate::client::{
-        state::{RecvResponse, Redirect, SendBody, SendRequest},
         Call, RecvResponseResult, RedirectAuthHeaders, SendRequestResult,
+        state::{RecvResponse, Redirect, SendBody, SendRequest},
     };
     use http::{HeaderValue, Method, Request, Version};
 

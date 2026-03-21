@@ -1,4 +1,4 @@
-use http::{header, HeaderName, HeaderValue, Method, StatusCode};
+use http::{HeaderName, HeaderValue, Method, StatusCode, header};
 
 #[cfg(feature = "server")]
 pub(crate) trait StatusCodeExt {

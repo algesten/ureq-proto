@@ -1,7 +1,7 @@
 use crate::client::SendRequestResult;
 
-use super::scenario::Scenario;
 use super::TestSliceExt;
+use super::scenario::Scenario;
 
 #[test]
 fn write_with_content_length() {

@@ -1,4 +1,4 @@
-use http::{header, Request, Version};
+use http::{Request, Version, header};
 
 use crate::body::BodyReader;
 use crate::ext::HeaderIterExt;
@@ -8,7 +8,7 @@ use crate::{ArrayVec, CloseReason, Error};
 
 use super::state::RecvRequest;
 use super::{Inner, Reply, ResponsePhase};
-use super::{RecvRequestResult, MAX_REQUEST_HEADERS};
+use super::{MAX_REQUEST_HEADERS, RecvRequestResult};
 
 impl Reply<RecvRequest> {
     /// Create a new Reply in the RecvRequest state.
@@ -97,10 +97,8 @@ impl Reply<RecvRequest> {
         let method = request.method();
 
         let header_lookup = |name: http::HeaderName| {
-            if let Some(header) = request.headers().get(name) {
-                return header.to_str().ok();
-            }
-            None
+            let header = request.headers().get(name)?;
+            header.to_str().ok()
         };
 
         let reader =

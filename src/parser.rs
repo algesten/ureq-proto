@@ -36,9 +36,8 @@ pub fn try_parse_response<const N: usize>(
         }
     };
 
-    let input_used = match maybe_input_used {
-        Status::Complete(v) => v,
-        Status::Partial => return Ok(None),
+    let Status::Complete(input_used) = maybe_input_used else {
+        return Ok(None);
     };
 
     let version = {
@@ -160,9 +159,8 @@ pub fn try_parse_request<const N: usize>(
         }
     };
 
-    let input_used = match maybe_input_used {
-        Status::Complete(v) => v,
-        Status::Partial => return Ok(None),
+    let Status::Complete(input_used) = maybe_input_used else {
+        return Ok(None);
     };
 
     let version = {

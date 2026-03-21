@@ -1,14 +1,14 @@
 use std::io::Write;
 
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use http::uri::Scheme;
-use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Uri, Version};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Uri, Version, header};
 
+use crate::Error;
 use crate::client::amended::AmendedRequest;
 use crate::ext::{AuthorityExt, MethodExt, SchemeExt};
 use crate::util::Writer;
-use crate::Error;
 
 use super::state::SendRequest;
 use super::{BodyState, Call, RequestPhase, SendRequestResult};
