@@ -1,11 +1,11 @@
 use std::fmt;
 use std::io::Write;
 
-use http::{header, HeaderName, HeaderValue, Method};
+use http::{HeaderName, HeaderValue, Method, header};
 
-use crate::chunk::Dechunker;
-use crate::util::{compare_lowercase_ascii, log_data, Writer};
 use crate::Error;
+use crate::chunk::Dechunker;
+use crate::util::{Writer, compare_lowercase_ascii, log_data};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct BodyWriter {

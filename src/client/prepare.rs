@@ -1,4 +1,4 @@
-use http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, header};
 
 use crate::body::BodyWriter;
 use crate::client::amended::AmendedRequest;

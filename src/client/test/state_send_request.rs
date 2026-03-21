@@ -1,8 +1,8 @@
-use crate::client::SendRequestResult;
 use crate::Error;
+use crate::client::SendRequestResult;
 
-use super::scenario::Scenario;
 use super::TestSliceExt;
+use super::scenario::Scenario;
 
 #[test]
 fn write_request() {

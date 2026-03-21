@@ -2,11 +2,11 @@ use std::io::Write;
 
 use http::{HeaderName, HeaderValue};
 
-use crate::util::Writer;
 use crate::Error;
+use crate::util::Writer;
 
 use super::state::SendResponse;
-use super::{do_write_send_line, Reply, ResponsePhase, SendResponseResult};
+use super::{Reply, ResponsePhase, SendResponseResult, do_write_send_line};
 
 impl Reply<SendResponse> {
     /// Write the response headers to the output buffer.

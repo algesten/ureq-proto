@@ -1,4 +1,4 @@
-use http::{header, StatusCode, Version};
+use http::{StatusCode, Version, header};
 
 use crate::client::test::scenario::Scenario;
 use crate::ext::HeaderIterExt;
@@ -41,10 +41,12 @@ fn receive_complete_response() {
         response.headers().get(header::CONTENT_LENGTH).unwrap(),
         "123"
     );
-    assert!(response
-        .headers()
-        .iter()
-        .has(header::CONTENT_TYPE, "text/plain"));
+    assert!(
+        response
+            .headers()
+            .iter()
+            .has(header::CONTENT_TYPE, "text/plain")
+    );
 
     assert!(call.can_proceed());
 }

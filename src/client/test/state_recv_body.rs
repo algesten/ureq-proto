@@ -1,7 +1,7 @@
 use http::Response;
 
-use crate::client::test::TestSliceExt;
 use crate::CloseReason;
+use crate::client::test::TestSliceExt;
 
 use super::scenario::Scenario;
 

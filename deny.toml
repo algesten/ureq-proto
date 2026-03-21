@@ -6,8 +6,6 @@
 # Install: `cargo install cargo-deny`
 # Check: `cargo deny check` or run `cargo_deny.sh`.
 
-# Note: running just `cargo deny check` without a `--target` can result in
-# false positives due to https://github.com/EmbarkStudios/cargo-deny/issues/324
 targets = [
   { triple = "aarch64-apple-darwin" },
   { triple = "i686-pc-windows-gnu" },

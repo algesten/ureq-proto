@@ -1,8 +1,8 @@
 use http::StatusCode;
 
+use crate::Error;
 use crate::body::BodyWriter;
 use crate::parser::try_parse_response;
-use crate::Error;
 
 use super::state::Await100;
 use super::{Await100Result, Call};

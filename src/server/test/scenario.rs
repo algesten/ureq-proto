@@ -162,7 +162,9 @@ impl Scenario {
         match reply.proceed() {
             SendResponseResult::SendBody(reply) => reply,
             SendResponseResult::Cleanup(_) => {
-                panic!("Expected SendBody variant, got Cleanup. This usually means the response doesn't need a body (e.g., HEAD request or 204 response)")
+                panic!(
+                    "Expected SendBody variant, got Cleanup. This usually means the response doesn't need a body (e.g., HEAD request or 204 response)"
+                )
             }
         }
     }

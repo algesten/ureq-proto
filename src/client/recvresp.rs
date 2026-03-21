@@ -1,13 +1,13 @@
-use http::{header, HeaderName, HeaderValue, Response, StatusCode, Version};
+use http::{HeaderName, HeaderValue, Response, StatusCode, Version, header};
 
+use crate::Error;
 use crate::body::BodyReader;
 use crate::ext::HeaderIterExt;
 use crate::parser::{try_parse_partial_response, try_parse_response};
 use crate::util::log_data;
-use crate::Error;
 
-use super::state::RecvResponse;
 use super::MAX_RESPONSE_HEADERS;
+use super::state::RecvResponse;
 use super::{Call, CloseReason, RecvResponseResult};
 
 impl Call<RecvResponse> {
@@ -143,10 +143,8 @@ impl Call<RecvResponse> {
         }
 
         let header_lookup = |name: HeaderName| {
-            if let Some(header) = response.headers().get(name) {
-                return header.to_str().ok();
-            }
-            None
+            let header = response.headers().get(name)?;
+            header.to_str().ok()
         };
 
         let force_recv = self.inner.force_recv_body;

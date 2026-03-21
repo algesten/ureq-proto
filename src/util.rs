@@ -5,11 +5,7 @@ use std::ops::{Deref, DerefMut};
 pub(crate) fn find_crlf(b: &[u8]) -> Option<usize> {
     let cr = b.iter().position(|c| *c == b'\r')?;
     let maybe_lf = b.get(cr + 1)?;
-    if *maybe_lf == b'\n' {
-        Some(cr)
-    } else {
-        None
-    }
+    if *maybe_lf == b'\n' { Some(cr) } else { None }
 }
 
 pub(crate) fn compare_lowercase_ascii(a: &str, lowercased: &str) -> bool {

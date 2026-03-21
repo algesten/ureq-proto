@@ -1,7 +1,7 @@
 use core::str;
 
-use crate::util::find_crlf;
 use crate::Error;
+use crate::util::find_crlf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Dechunker {
@@ -54,11 +54,7 @@ impl Dechunker {
 
     #[cfg(test)]
     fn left(&self) -> usize {
-        if let Self::Chunk(l) = self {
-            *l
-        } else {
-            0
-        }
+        if let Self::Chunk(l) = self { *l } else { 0 }
     }
 
     pub fn is_ended(&self) -> bool {
