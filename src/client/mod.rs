@@ -483,21 +483,22 @@ mod redirect;
 
 /// Strategy for preserving authorization headers during redirects.
 ///
-/// This enum defines how authorization headers should be handled when following
-/// redirects:
+/// This enum defines how the `authorization` and `proxy-authorization` headers
+/// should be handled when following redirects:
 ///
-/// * `Never`: Never preserve the `authorization` header in redirects. This is the default.
-/// * `SameHost`: Preserve the `authorization` header when the redirect is to the same host
+/// * `Never`: Never preserve these headers in redirects. This is the default.
+/// * `SameHost`: Preserve these headers when the redirect is to the same host
 ///   and uses the same scheme (or switches to a more secure one, i.e., from HTTP to HTTPS,
 ///   but not the reverse).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RedirectAuthHeaders {
-    /// Never preserve the `authorization` header on redirect. This is the default.
+    /// Never preserve the `authorization` or `proxy-authorization` header on redirect.
+    /// This is the default.
     Never,
-    /// Preserve the `authorization` header when the redirect is to the same host. Both hosts must use
-    /// the same scheme (or switch to a more secure one, i.e we can redirect from `http` to `https`,
-    /// but not the reverse).
+    /// Preserve the `authorization` and `proxy-authorization` headers when the redirect
+    /// is to the same host. Both hosts must use the same scheme (or switch to a more
+    /// secure one, i.e we can redirect from `http` to `https`, but not the reverse).
     SameHost,
 }
 
