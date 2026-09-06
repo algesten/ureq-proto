@@ -53,8 +53,7 @@ pub fn try_parse_response<const N: usize>(
     let status = {
         // unwrap: Looking at the impl of parse(), code cannot be None.
         let v = res.code.unwrap_or(000);
-        // unwrap: Looking at the impl of parse(), the status is 3 digits and cant fail.
-        StatusCode::from_u16(v).unwrap()
+        status_code(v)?
     };
 
     let mut builder = Response::builder().version(version).status(status);
@@ -66,6 +65,15 @@ pub fn try_parse_response<const N: usize>(
     let response = builder.body(()).expect("a valid response");
 
     Ok(Some((input_used, response)))
+}
+
+/// Convert a status code parsed by httparse into a [`StatusCode`].
+///
+/// httparse accepts any three ASCII digits, but [`StatusCode`] only allows
+/// `100..=999`. Anything below 100 is a protocol error, not a panic.
+fn status_code(v: u16) -> Result<StatusCode, Error> {
+    StatusCode::from_u16(v)
+        .map_err(|_| Error::HttpParseFail(format!("invalid status code: {:03}", v)))
 }
 
 /// Try parsing as much as possible of a response.
@@ -108,8 +116,7 @@ pub fn try_parse_partial_response<const N: usize>(
             Some(v) => v,
             None => return Ok(None),
         };
-        // unwrap: Looking at the impl of parse(), the status is 3 digits and cant fail.
-        StatusCode::from_u16(v).unwrap_or_default()
+        status_code(v)?
     };
 
     let mut builder = Response::builder().version(version).status(status);
@@ -197,7 +204,7 @@ pub fn try_parse_request<const N: usize>(
 
 #[cfg(test)]
 mod test {
-    use crate::parser::{try_parse_request, try_parse_response};
+    use crate::parser::{try_parse_partial_response, try_parse_request, try_parse_response};
 
     #[test]
     fn ensure_no_half_response() {
@@ -212,5 +219,40 @@ mod test {
     fn error_on_invalid_authority() {
         let bytes = "GET example\".com HTTP/1.1\r\n\r\n";
         try_parse_request::<0>(bytes.as_bytes()).expect_err("invalid URI character");
+    }
+
+    // httparse accepts any three ASCII digits as a status code, but
+    // http::StatusCode only allows 100..=999. Codes below 100 must
+    // surface as an error rather than a panic (or a bogus 200).
+    // https://github.com/algesten/ureq-proto/issues/34
+
+    #[test]
+    fn error_on_invalid_status_code() {
+        let bytes = "HTTP/1.1 000 NOK\r\n\r\n";
+        try_parse_response::<20>(bytes.as_bytes()).expect_err("invalid status code");
+
+        let bytes = "HTTP/1.1 099 NOK\r\n\r\n";
+        try_parse_response::<20>(bytes.as_bytes()).expect_err("invalid status code");
+    }
+
+    #[test]
+    fn error_on_invalid_status_code_partial() {
+        let bytes = "HTTP/1.1 000 NOK\r\n";
+        try_parse_partial_response::<20>(bytes.as_bytes()).expect_err("invalid status code");
+    }
+
+    #[test]
+    fn boundary_status_codes_parse() {
+        let bytes = "HTTP/1.1 100 Continue\r\n\r\n";
+        let (_, res) = try_parse_response::<20>(bytes.as_bytes())
+            .expect("parse ok")
+            .expect("complete");
+        assert_eq!(res.status().as_u16(), 100);
+
+        let bytes = "HTTP/1.1 999 Whatever\r\n\r\n";
+        let (_, res) = try_parse_response::<20>(bytes.as_bytes())
+            .expect("parse ok")
+            .expect("complete");
+        assert_eq!(res.status().as_u16(), 999);
     }
 }
