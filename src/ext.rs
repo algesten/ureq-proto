@@ -1,5 +1,7 @@
 use http::{HeaderName, HeaderValue, Method, StatusCode, header};
 
+use crate::util::compare_lowercase_ascii;
+
 #[cfg(feature = "server")]
 pub(crate) trait StatusCodeExt {
     /// Check if the status code requires a body according to HTTP spec.
@@ -76,13 +78,23 @@ impl MethodExt for Method {
 }
 
 pub(crate) trait HeaderIterExt {
-    fn has(self, key: HeaderName, value: &str) -> bool;
+    /// Whether any header line named `key` lists `token` as one of its
+    /// comma-separated elements.
+    ///
+    /// Elements are trimmed of surrounding whitespace and compared ASCII
+    /// case-insensitively, as required for list-based fields such as
+    /// `Connection` (RFC 9110 §7.6.1) and `Expect` (RFC 9110 §10.1.1).
+    /// `token` must be given in lowercase.
+    fn has(self, key: HeaderName, token: &str) -> bool;
     fn has_expect_100(self) -> bool;
 }
 
 impl<'a, I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>> HeaderIterExt for I {
-    fn has(self, key: HeaderName, value: &str) -> bool {
-        self.filter(|i| i.0 == key).any(|i| i.1 == value)
+    fn has(self, key: HeaderName, token: &str) -> bool {
+        self.filter(|(name, _)| **name == key)
+            .filter_map(|(_, value)| value.to_str().ok())
+            .flat_map(|value| value.split(','))
+            .any(|element| compare_lowercase_ascii(element.trim(), token))
     }
 
     fn has_expect_100(self) -> bool {
@@ -147,5 +159,73 @@ impl AuthorityExt for http::uri::Authority {
     fn password(&self) -> Option<&str> {
         self.userinfo()
             .and_then(|a| a.rfind(':').map(|i| &a[i + 1..]))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use http::HeaderMap;
+
+    fn headers(lines: &[(&'static str, &'static str)]) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        for (name, value) in lines {
+            map.append(*name, HeaderValue::from_static(value));
+        }
+        map
+    }
+
+    // Connection options are comma-separated tokens compared case-insensitively.
+    // https://www.rfc-editor.org/rfc/rfc9110#section-7.6.1
+
+    #[test]
+    fn has_is_case_insensitive() {
+        let h = headers(&[("connection", "Close")]);
+        assert!(h.iter().has(header::CONNECTION, "close"));
+
+        let h = headers(&[("connection", "Keep-Alive")]);
+        assert!(h.iter().has(header::CONNECTION, "keep-alive"));
+    }
+
+    #[test]
+    fn has_finds_element_in_list() {
+        let h = headers(&[("connection", "keep-alive, close")]);
+        assert!(h.iter().has(header::CONNECTION, "close"));
+        assert!(h.iter().has(header::CONNECTION, "keep-alive"));
+
+        let h = headers(&[("connection", "close,Upgrade")]);
+        assert!(h.iter().has(header::CONNECTION, "close"));
+        assert!(h.iter().has(header::CONNECTION, "upgrade"));
+    }
+
+    #[test]
+    fn has_across_repeated_lines() {
+        let h = headers(&[("connection", "keep-alive"), ("connection", "close")]);
+        assert!(h.iter().has(header::CONNECTION, "close"));
+    }
+
+    #[test]
+    fn has_no_partial_or_wrong_header_match() {
+        let h = headers(&[("connection", "closed")]);
+        assert!(!h.iter().has(header::CONNECTION, "close"));
+
+        let h = headers(&[("connection", "keep-alive")]);
+        assert!(!h.iter().has(header::CONNECTION, "close"));
+
+        let h = headers(&[("upgrade", "close")]);
+        assert!(!h.iter().has(header::CONNECTION, "close"));
+
+        let h = headers(&[("connection", "")]);
+        assert!(!h.iter().has(header::CONNECTION, "close"));
+    }
+
+    #[test]
+    fn has_expect_100_is_case_insensitive() {
+        // https://www.rfc-editor.org/rfc/rfc9110#section-10.1.1
+        let h = headers(&[("expect", "100-Continue")]);
+        assert!(h.iter().has_expect_100());
+
+        let h = headers(&[("expect", "100-continue")]);
+        assert!(h.iter().has_expect_100());
     }
 }
