@@ -224,6 +224,25 @@ mod tests_client {
         assert!(matches!(err, Error::TooManyHostHeaders));
     }
 
+    // BadContentLengthHeader
+    #[test]
+    fn test_signed_content_length_header() {
+        // Content-Length must be plain digits. Rust's integer parsing would
+        // accept a leading sign, the HTTP grammar does not.
+        let req = Request::builder()
+            .uri("http://example.com")
+            .header("Content-Length", "+10")
+            .body(())
+            .unwrap();
+
+        let (mut call, mut output) = setup_call(req);
+
+        // Try to write the request headers
+        let err = call.write(&mut output).unwrap_err();
+
+        assert!(matches!(err, Error::BadContentLengthHeader));
+    }
+
     // TooManyContentLengthHeaders
     #[test]
     fn test_too_many_content_length_headers() {

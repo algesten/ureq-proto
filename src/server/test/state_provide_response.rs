@@ -192,3 +192,20 @@ fn provide_response_with_chunked_encoding() {
         .any(|(name, value)| name == "transfer-encoding" && value == "chunked");
     assert!(has_chunked);
 }
+
+#[test]
+fn provide_response_with_signed_content_length_is_rejected() {
+    let scenario = Scenario::builder().get("/path").build();
+    let reply = scenario.to_provide_response();
+
+    // Content-Length must be plain digits. Rust's integer parsing would
+    // accept a leading sign, the HTTP grammar does not.
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("content-length", "+42")
+        .body(())
+        .unwrap();
+
+    let err = reply.provide(response).unwrap_err();
+    assert_eq!(err, Error::BadContentLengthHeader);
+}
