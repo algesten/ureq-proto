@@ -382,3 +382,13 @@ fn content_length_with_sign_is_rejected() {
     let err = call.try_response(input, false).unwrap_err();
     assert_eq!(err, Error::BadContentLengthHeader);
 }
+
+#[test]
+fn empty_content_length_is_rejected() {
+    let input: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Length:\r\n\r\n";
+    let scenario = Scenario::builder().get("https://q.test").build();
+    let mut call = scenario.to_recv_response();
+
+    let err = call.try_response(input, false).unwrap_err();
+    assert_eq!(err, Error::BadContentLengthHeader);
+}

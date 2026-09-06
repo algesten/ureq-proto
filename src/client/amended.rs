@@ -4,7 +4,7 @@ use http::uri::PathAndQuery;
 use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, header};
 
 use crate::Error;
-use crate::body::{BodyWriter, parse_content_length};
+use crate::body::{BodyWriter, parse_content_length_value};
 use crate::ext::MethodExt;
 use crate::util::compare_lowercase_ascii;
 
@@ -169,8 +169,12 @@ impl AmendedRequest {
             req_auth_header = true;
         }
 
-        let content_length =
-            parse_content_length(self.headers_get(header::CONTENT_LENGTH).into_iter())?;
+        // We control what we send: a single header line holding a single
+        // number. A comma separated list must not reach the wire.
+        let content_length = self
+            .headers_get(header::CONTENT_LENGTH)
+            .map(|h| parse_content_length_value(h.as_bytes()))
+            .transpose()?;
 
         let has_chunked = self
             .headers_get_all(header::TRANSFER_ENCODING)

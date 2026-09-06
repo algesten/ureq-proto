@@ -542,7 +542,13 @@ pub(crate) fn parse_content_length<'a>(
     Ok(result)
 }
 
-fn parse_content_length_value(value: &[u8]) -> Result<u64, Error> {
+/// Parse one `Content-Length` value: `1*DIGIT` with optional surrounding
+/// whitespace, nothing else.
+///
+/// This is the grammar a sender must produce (RFC 9110 §8.6), so it is what
+/// the outgoing request and response analyzers use. The list tolerance in
+/// [`parse_content_length`] is for received messages only.
+pub(crate) fn parse_content_length_value(value: &[u8]) -> Result<u64, Error> {
     let trimmed = trim_ows(value);
 
     if trimmed.is_empty() || !trimmed.iter().all(u8::is_ascii_digit) {

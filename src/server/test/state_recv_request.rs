@@ -225,3 +225,23 @@ fn content_length_with_sign_is_rejected() {
 
     assert_eq!(err, Error::BadContentLengthHeader);
 }
+
+#[test]
+fn content_length_list_with_differing_values_is_rejected() {
+    let mut reply = Reply::new().unwrap();
+
+    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 42, 43\r\n\r\n";
+    let err = reply.try_request(input).unwrap_err();
+
+    assert_eq!(err, Error::TooManyContentLengthHeaders);
+}
+
+#[test]
+fn empty_content_length_is_rejected() {
+    let mut reply = Reply::new().unwrap();
+
+    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\ncontent-length:\r\n\r\n";
+    let err = reply.try_request(input).unwrap_err();
+
+    assert_eq!(err, Error::BadContentLengthHeader);
+}

@@ -48,7 +48,7 @@ impl fmt::Display for Error {
                 write!(f, "{} not valid for HTTP version {:?}", m, v)
             }
             Error::TooManyHostHeaders => write!(f, "more than one host header"),
-            Error::TooManyContentLengthHeaders => write!(f, "more than one content-length header"),
+            Error::TooManyContentLengthHeaders => write!(f, "conflicting content-length headers"),
             Error::BadHostHeader => write!(f, "host header is not a string"),
             Error::BadAuthorizationHeader => write!(f, "authorization header is not a string"),
             Error::BadContentLengthHeader => write!(f, "content-length header not a number"),
