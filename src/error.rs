@@ -48,7 +48,7 @@ impl fmt::Display for Error {
                 write!(f, "{} not valid for HTTP version {:?}", m, v)
             }
             Error::TooManyHostHeaders => write!(f, "more than one host header"),
-            Error::TooManyContentLengthHeaders => write!(f, "more than one content-length header"),
+            Error::TooManyContentLengthHeaders => write!(f, "conflicting content-length headers"),
             Error::BadHostHeader => write!(f, "host header is not a string"),
             Error::BadAuthorizationHeader => write!(f, "authorization header is not a string"),
             Error::BadContentLengthHeader => write!(f, "content-length header not a number"),
@@ -222,6 +222,48 @@ mod tests_client {
 
         // Verify that it returns a TooManyHostHeaders error
         assert!(matches!(err, Error::TooManyHostHeaders));
+    }
+
+    // BadContentLengthHeader
+    #[test]
+    fn test_signed_content_length_header() {
+        // Content-Length must be plain digits. Rust's integer parsing would
+        // accept a leading sign, the HTTP grammar does not.
+        let req = Request::builder()
+            .uri("http://example.com")
+            .header("Content-Length", "+10")
+            .body(())
+            .unwrap();
+
+        let (mut call, mut output) = setup_call(req);
+
+        // Try to write the request headers
+        let err = call.write(&mut output).unwrap_err();
+
+        assert!(matches!(err, Error::BadContentLengthHeader));
+    }
+
+    // BadContentLengthHeader
+    #[test]
+    fn test_list_content_length_header() {
+        // We control what we send. A comma separated list is not a valid
+        // Content-Length to send (RFC 9110 §8.6: the value is 1*DIGIT), so
+        // it must be rejected here rather than written to the wire verbatim.
+        let req = Request::builder()
+            .uri("http://example.com")
+            .header("Content-Length", "42, 42")
+            .body(())
+            .unwrap();
+
+        let (mut call, mut output) = setup_call(req);
+
+        // Try to write the request headers
+        let err = call.write(&mut output).unwrap_err();
+
+        assert!(matches!(
+            err,
+            Error::BadContentLengthHeader | Error::TooManyContentLengthHeaders
+        ));
     }
 
     // TooManyContentLengthHeaders

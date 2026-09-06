@@ -1,7 +1,7 @@
 use std::fmt;
 use std::io::Write;
 
-use http::{HeaderName, HeaderValue, Method, header};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, header};
 
 use crate::Error;
 use crate::chunk::Dechunker;
@@ -268,11 +268,11 @@ impl BodyReader {
     }
 
     #[cfg(feature = "server")]
-    pub fn for_request<'a>(
+    pub fn for_request(
         http10: bool,
         method: &Method,
         force_send: bool,
-        header_lookup: &'a dyn Fn(http::HeaderName) -> Option<&'a str>,
+        headers: &HeaderMap,
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
@@ -280,7 +280,7 @@ impl BodyReader {
             return Ok(Self::NoBody);
         }
 
-        let ret = Self::header_defined(http10, header_lookup)?.unwrap_or_else(|| {
+        let ret = Self::header_defined(http10, headers)?.unwrap_or_else(|| {
             if !http10 && method.need_request_body() {
                 Self::Chunked(Dechunker::new())
             } else {
@@ -293,15 +293,14 @@ impl BodyReader {
 
     #[cfg(feature = "client")]
     // https://datatracker.ietf.org/doc/html/rfc2616#section-4.3
-    pub fn for_response<'a>(
+    pub fn for_response(
         http10: bool,
         method: &Method,
         status_code: u16,
         force_recv: bool,
-        header_lookup: &'a dyn Fn(HeaderName) -> Option<&'a str>,
+        headers: &HeaderMap,
     ) -> Result<Self, Error> {
-        let header_defined =
-            Self::header_defined(http10, header_lookup)?.unwrap_or(Self::CloseDelimited);
+        let header_defined = Self::header_defined(http10, headers)?.unwrap_or(Self::CloseDelimited);
 
         // Is body mode being defined in headers?
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
@@ -322,25 +321,15 @@ impl BodyReader {
         }
     }
 
-    fn header_defined<'a>(
-        http10: bool,
-        header_lookup: &'a dyn Fn(HeaderName) -> Option<&'a str>,
-    ) -> Result<Option<Self>, Error> {
-        let mut content_length: Option<u64> = None;
+    fn header_defined(http10: bool, headers: &HeaderMap) -> Result<Option<Self>, Error> {
+        let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
+
         let mut chunked = false;
 
-        // for head in headers {
-        if let Some(value) = header_lookup(header::CONTENT_LENGTH) {
-            let v = value
-                .parse::<u64>()
-                .map_err(|_| Error::BadContentLengthHeader)?;
-            if content_length.is_some() {
-                return Err(Error::TooManyContentLengthHeaders);
-            }
-            content_length = Some(v);
-        }
-
-        if let Some(value) = header_lookup(header::TRANSFER_ENCODING) {
+        if let Some(value) = headers
+            .get(header::TRANSFER_ENCODING)
+            .and_then(|v| v.to_str().ok())
+        {
             // Header can repeat, stop looking if we found "chunked"
             chunked = value
                 .split(',')
@@ -519,9 +508,129 @@ impl fmt::Debug for BodyReader {
     }
 }
 
+/// Parse the `Content-Length` of a message from all of its header lines.
+///
+/// This follows RFC 9110 §8.6 and RFC 9112 §6.3 the way libcurl does.
+///
+/// * A value is `1*DIGIT`. Leading zeros are allowed. A sign, whitespace
+///   inside the number or any other character is an error.
+/// * Repeated header lines are equivalent to one comma separated list
+///   (RFC 9110 §5.3). Every element must be a valid value and all elements
+///   must be the same number, `42` and `042` included. Differing values are
+///   rejected, there is no first-wins or last-wins.
+/// * An empty value, an empty list element and a number that does not fit
+///   in a `u64` are errors.
+///
+/// Returns `Ok(None)` when there is no `Content-Length` header at all.
+pub(crate) fn parse_content_length<'a>(
+    values: impl Iterator<Item = &'a HeaderValue>,
+) -> Result<Option<u64>, Error> {
+    let mut result = None;
+
+    for value in values {
+        for element in value.as_bytes().split(|b| *b == b',') {
+            let n = parse_content_length_value(element)?;
+
+            if result.is_some_and(|prev| prev != n) {
+                return Err(Error::TooManyContentLengthHeaders);
+            }
+
+            result = Some(n);
+        }
+    }
+
+    Ok(result)
+}
+
+/// Parse one `Content-Length` value: `1*DIGIT` with optional surrounding
+/// whitespace, nothing else.
+///
+/// This is the grammar a sender must produce (RFC 9110 §8.6), so it is what
+/// the outgoing request and response analyzers use. The list tolerance in
+/// [`parse_content_length`] is for received messages only.
+pub(crate) fn parse_content_length_value(value: &[u8]) -> Result<u64, Error> {
+    let trimmed = trim_ows(value);
+
+    if trimmed.is_empty() || !trimmed.iter().all(u8::is_ascii_digit) {
+        return Err(Error::BadContentLengthHeader);
+    }
+
+    // Only ASCII digits, so this is valid UTF-8 and cannot carry a sign.
+    // A number too large for u64 fails to parse.
+    std::str::from_utf8(trimmed)
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .ok_or(Error::BadContentLengthHeader)
+}
+
+/// Strip optional whitespace (SP / HTAB) from both ends.
+fn trim_ows(mut b: &[u8]) -> &[u8] {
+    while let [b' ' | b'\t', rest @ ..] = b {
+        b = rest;
+    }
+    while let [rest @ .., b' ' | b'\t'] = b {
+        b = rest;
+    }
+    b
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn cl(values: &[&str]) -> Result<Option<u64>, Error> {
+        let headers: Vec<HeaderValue> = values
+            .iter()
+            .map(|v| HeaderValue::from_bytes(v.as_bytes()).unwrap())
+            .collect();
+        parse_content_length(headers.iter())
+    }
+
+    #[test]
+    fn content_length_single_values() {
+        assert_eq!(cl(&[]), Ok(None));
+        assert_eq!(cl(&["0"]), Ok(Some(0)));
+        assert_eq!(cl(&["42"]), Ok(Some(42)));
+        assert_eq!(cl(&["042"]), Ok(Some(42)));
+        assert_eq!(cl(&[" 42 "]), Ok(Some(42)));
+        assert_eq!(cl(&["18446744073709551615"]), Ok(Some(u64::MAX)));
+    }
+
+    #[test]
+    fn content_length_repeats_must_agree() {
+        assert_eq!(cl(&["42", "42"]), Ok(Some(42)));
+        assert_eq!(cl(&["42, 42"]), Ok(Some(42)));
+        assert_eq!(cl(&["42", "042"]), Ok(Some(42)));
+        assert_eq!(cl(&["42,42", "42"]), Ok(Some(42)));
+        assert_eq!(cl(&["42", "43"]), Err(Error::TooManyContentLengthHeaders));
+        assert_eq!(cl(&["42, 43"]), Err(Error::TooManyContentLengthHeaders));
+        assert_eq!(
+            cl(&["43", "42, 42"]),
+            Err(Error::TooManyContentLengthHeaders)
+        );
+    }
+
+    #[test]
+    fn content_length_must_be_digits() {
+        assert_eq!(cl(&["+42"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["-1"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["4 2"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["42abc"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["0x2a"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&[""]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["  "]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["42,"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["42,,42"]), Err(Error::BadContentLengthHeader));
+        assert_eq!(cl(&["42", ""]), Err(Error::BadContentLengthHeader));
+        assert_eq!(
+            cl(&["18446744073709551616"]),
+            Err(Error::BadContentLengthHeader)
+        );
+        assert_eq!(
+            cl(&["99999999999999999999999"]),
+            Err(Error::BadContentLengthHeader)
+        );
+    }
 
     #[test]
     fn test_calculate_max_input() {

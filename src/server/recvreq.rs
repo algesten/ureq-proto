@@ -96,13 +96,12 @@ impl Reply<RecvRequest> {
         let http10 = request.version() == Version::HTTP_10;
         let method = request.method();
 
-        let header_lookup = |name: http::HeaderName| {
-            let header = request.headers().get(name)?;
-            header.to_str().ok()
-        };
-
-        let reader =
-            BodyReader::for_request(http10, method, self.inner.force_recv_body, &header_lookup)?;
+        let reader = BodyReader::for_request(
+            http10,
+            method,
+            self.inner.force_recv_body,
+            request.headers(),
+        )?;
         self.inner.state.reader = Some(reader);
 
         Ok(Some((input_used, request)))

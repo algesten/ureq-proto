@@ -1,4 +1,4 @@
-use http::{HeaderName, HeaderValue, Response, StatusCode, Version, header};
+use http::{HeaderValue, Response, StatusCode, Version, header};
 
 use crate::Error;
 use crate::body::BodyReader;
@@ -142,18 +142,13 @@ impl Call<RecvResponse> {
             return Ok(Some((input_used, response)));
         }
 
-        let header_lookup = |name: HeaderName| {
-            let header = response.headers().get(name)?;
-            header.to_str().ok()
-        };
-
         let force_recv = self.inner.force_recv_body;
         let recv_body_mode = BodyReader::for_response(
             http10,
             self.inner.request.method(),
             status,
             force_recv,
-            &header_lookup,
+            response.headers(),
         )?;
 
         self.inner.state.reader = Some(recv_body_mode);
