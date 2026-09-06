@@ -122,7 +122,12 @@ pub fn try_parse_partial_response<const N: usize>(
     let mut builder = Response::builder().version(version).status(status);
 
     for h in res.headers {
-        if h.name.is_empty() || h.value.is_empty() {
+        // On a partial parse, httparse leaves the unparsed slots as
+        // EMPTY_HEADER. A parsed header always has a non-empty name, since
+        // the first byte of a header line must be a token character. The
+        // value however can legitimately be empty, so only the name tells
+        // us where the parsed headers end.
+        if h.name.is_empty() {
             break;
         }
         builder = builder.header(h.name, h.value);
@@ -239,6 +244,26 @@ mod test {
     fn error_on_invalid_status_code_partial() {
         let bytes = "HTTP/1.1 000 NOK\r\n";
         try_parse_partial_response::<20>(bytes.as_bytes()).expect_err("invalid status code");
+    }
+
+    #[test]
+    fn partial_response_keeps_headers_after_empty_value() {
+        // An empty header value is legal. The partial parser must not
+        // mistake it for the end of the parsed headers and drop the rest.
+        let bytes = "HTTP/1.1 302 Found\r\n\
+            X-Empty:\r\n\
+            Location: http://example.com/\r\n";
+
+        let res = try_parse_partial_response::<20>(bytes.as_bytes())
+            .expect("parse ok")
+            .expect("status line complete");
+
+        assert_eq!(res.status().as_u16(), 302);
+        assert_eq!(res.headers().get("x-empty").expect("x-empty present"), "");
+        assert_eq!(
+            res.headers().get("location").expect("location present"),
+            "http://example.com/"
+        );
     }
 
     #[test]

@@ -52,6 +52,32 @@ fn receive_complete_response() {
 }
 
 #[test]
+fn partial_redirect_with_empty_header_value() {
+    // Broken servers may omit the final \r\n of a redirect. With
+    // allow_partial_redirect we accept the redirect from the partial
+    // headers. An empty header value before Location must not hide it.
+    let input: &[u8] = b"\
+        HTTP/1.1 302 Found\r\n\
+        X-Empty:\r\n\
+        Location: https://q.test/other\r\n";
+
+    let scenario = Scenario::builder().get("https://q.test").build();
+    let mut call = scenario.to_recv_response();
+
+    let (input_used, maybe_response) = call.try_response(input, true).unwrap();
+    assert_eq!(input_used, input.len());
+
+    let response = maybe_response.expect("partial redirect detected");
+    assert_eq!(response.status(), StatusCode::FOUND);
+    assert_eq!(
+        response.headers().get(header::LOCATION).unwrap(),
+        "https://q.test/other"
+    );
+    assert!(response.headers().iter().has(header::CONNECTION, "close"));
+    assert!(call.can_proceed());
+}
+
+#[test]
 fn prepended_100_continue() {
     // In the case of expect-100-continue, there's a chance the 100-continue
     // arrives after we started sending the request body, in which case
