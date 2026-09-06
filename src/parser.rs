@@ -242,6 +242,26 @@ mod test {
     }
 
     #[test]
+    fn partial_response_keeps_headers_after_empty_value() {
+        // An empty header value is legal. The partial parser must not
+        // mistake it for the end of the parsed headers and drop the rest.
+        let bytes = "HTTP/1.1 302 Found\r\n\
+            X-Empty:\r\n\
+            Location: http://example.com/\r\n";
+
+        let res = try_parse_partial_response::<20>(bytes.as_bytes())
+            .expect("parse ok")
+            .expect("status line complete");
+
+        assert_eq!(res.status().as_u16(), 302);
+        assert_eq!(res.headers().get("x-empty").expect("x-empty present"), "");
+        assert_eq!(
+            res.headers().get("location").expect("location present"),
+            "http://example.com/"
+        );
+    }
+
+    #[test]
     fn boundary_status_codes_parse() {
         let bytes = "HTTP/1.1 100 Continue\r\n\r\n";
         let (_, res) = try_parse_response::<20>(bytes.as_bytes())
