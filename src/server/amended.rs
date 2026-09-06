@@ -3,7 +3,7 @@ use std::fmt;
 use http::{HeaderName, HeaderValue, Response, StatusCode, Version, header};
 
 use crate::Error;
-use crate::body::BodyWriter;
+use crate::body::{BodyWriter, parse_content_length};
 use crate::util::compare_lowercase_ascii;
 
 pub(crate) struct AmendedResponse {
@@ -68,15 +68,8 @@ impl AmendedResponse {
             return Err(Error::TooManyContentLengthHeaders);
         }
 
-        let mut content_length: Option<u64> = None;
-        if let Some(h) = self.headers_get(header::CONTENT_LENGTH) {
-            let n = h
-                .to_str()
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .ok_or(Error::BadContentLengthHeader)?;
-            content_length = Some(n);
-        }
+        let content_length =
+            parse_content_length(self.headers_get(header::CONTENT_LENGTH).into_iter())?;
 
         let has_chunked = self
             .headers_get_all(header::TRANSFER_ENCODING)
