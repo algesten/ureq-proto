@@ -1,5 +1,7 @@
 use http::{HeaderName, HeaderValue, Method, StatusCode, header};
 
+use crate::util::compare_lowercase_ascii;
+
 #[cfg(feature = "server")]
 pub(crate) trait StatusCodeExt {
     /// Check if the status code requires a body according to HTTP spec.
@@ -76,13 +78,23 @@ impl MethodExt for Method {
 }
 
 pub(crate) trait HeaderIterExt {
-    fn has(self, key: HeaderName, value: &str) -> bool;
+    /// Whether any header line named `key` lists `token` as one of its
+    /// comma-separated elements.
+    ///
+    /// Elements are trimmed of surrounding whitespace and compared ASCII
+    /// case-insensitively, as required for list-based fields such as
+    /// `Connection` (RFC 9110 §7.6.1) and `Expect` (RFC 9110 §10.1.1).
+    /// `token` must be given in lowercase.
+    fn has(self, key: HeaderName, token: &str) -> bool;
     fn has_expect_100(self) -> bool;
 }
 
 impl<'a, I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>> HeaderIterExt for I {
-    fn has(self, key: HeaderName, value: &str) -> bool {
-        self.filter(|i| i.0 == key).any(|i| i.1 == value)
+    fn has(self, key: HeaderName, token: &str) -> bool {
+        self.filter(|(name, _)| **name == key)
+            .filter_map(|(_, value)| value.to_str().ok())
+            .flat_map(|value| value.split(','))
+            .any(|element| compare_lowercase_ascii(element.trim(), token))
     }
 
     fn has_expect_100(self) -> bool {
