@@ -122,7 +122,12 @@ pub fn try_parse_partial_response<const N: usize>(
     let mut builder = Response::builder().version(version).status(status);
 
     for h in res.headers {
-        if h.name.is_empty() || h.value.is_empty() {
+        // On a partial parse, httparse leaves the unparsed slots as
+        // EMPTY_HEADER. A parsed header always has a non-empty name, since
+        // the first byte of a header line must be a token character. The
+        // value however can legitimately be empty, so only the name tells
+        // us where the parsed headers end.
+        if h.name.is_empty() {
             break;
         }
         builder = builder.header(h.name, h.value);
