@@ -209,3 +209,24 @@ fn provide_response_with_signed_content_length_is_rejected() {
     let err = reply.provide(response).unwrap_err();
     assert_eq!(err, Error::BadContentLengthHeader);
 }
+
+#[test]
+fn provide_response_with_content_length_list_is_rejected() {
+    let scenario = Scenario::builder().get("/path").build();
+    let reply = scenario.to_provide_response();
+
+    // We control what we send. A comma separated list is not a valid
+    // Content-Length to send (RFC 9110 §8.6: the value is 1*DIGIT), so it
+    // must be rejected here rather than written to the wire verbatim.
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("content-length", "42, 42")
+        .body(())
+        .unwrap();
+
+    let err = reply.provide(response).unwrap_err();
+    assert!(matches!(
+        err,
+        Error::BadContentLengthHeader | Error::TooManyContentLengthHeaders
+    ));
+}

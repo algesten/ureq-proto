@@ -243,6 +243,29 @@ mod tests_client {
         assert!(matches!(err, Error::BadContentLengthHeader));
     }
 
+    // BadContentLengthHeader
+    #[test]
+    fn test_list_content_length_header() {
+        // We control what we send. A comma separated list is not a valid
+        // Content-Length to send (RFC 9110 §8.6: the value is 1*DIGIT), so
+        // it must be rejected here rather than written to the wire verbatim.
+        let req = Request::builder()
+            .uri("http://example.com")
+            .header("Content-Length", "42, 42")
+            .body(())
+            .unwrap();
+
+        let (mut call, mut output) = setup_call(req);
+
+        // Try to write the request headers
+        let err = call.write(&mut output).unwrap_err();
+
+        assert!(matches!(
+            err,
+            Error::BadContentLengthHeader | Error::TooManyContentLengthHeaders
+        ));
+    }
+
     // TooManyContentLengthHeaders
     #[test]
     fn test_too_many_content_length_headers() {
