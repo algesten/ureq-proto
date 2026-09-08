@@ -222,6 +222,22 @@ fn join(base: Uri, location: &str) -> Result<Uri, Error> {
         return Ok(maybe.unwrap());
     }
 
+    if location.starts_with("//") {
+        // Location is a network-path reference, i.e. it holds its own
+        // authority and we only inherit the scheme of the base uri.
+        // https://datatracker.ietf.org/doc/html/rfc3986#section-4.2
+        let scheme = parts
+            .scheme
+            .as_ref()
+            .ok_or_else(|| Error::BadLocationHeader(location.to_string()))?;
+
+        let joined: Uri = format!("{}:{}", scheme.as_str(), location)
+            .parse()
+            .map_err(|_| Error::BadLocationHeader(location.to_string()))?;
+
+        return Ok(joined);
+    }
+
     if location.starts_with("/") {
         // Location is root-relative, i.e. we keep the
         // authority of the base uri but replace the path
@@ -311,5 +327,53 @@ mod test {
     fn join_things() {
         let uri: Uri = "foo.html".parse().unwrap();
         println!("{:?}", uri.into_parts());
+    }
+
+    #[test]
+    fn join_absolute_uri() {
+        let base: Uri = "https://example.com/a/b".parse().unwrap();
+        let uri = join(base, "http://other.example.com/c").unwrap();
+        assert_eq!(uri, "http://other.example.com/c");
+    }
+
+    #[test]
+    fn join_root_relative_path() {
+        let base: Uri = "https://example.com/a/b".parse().unwrap();
+        let uri = join(base, "/c").unwrap();
+        assert_eq!(uri, "https://example.com/c");
+    }
+
+    #[test]
+    fn join_relative_path() {
+        let base: Uri = "https://example.com/a/b".parse().unwrap();
+        let uri = join(base, "c/d").unwrap();
+        assert_eq!(uri, "https://example.com/a/c/d");
+    }
+
+    #[test]
+    fn join_network_path_reference() {
+        // https://github.com/algesten/ureq/issues/1196
+        let base: Uri = "https://www.wikidata.org/wiki/Special:EntityData/Q2"
+            .parse()
+            .unwrap();
+        let uri = join(base, "//www.wikidata.org/wiki/Special:EntityData/Q2.ttl").unwrap();
+        assert_eq!(
+            uri,
+            "https://www.wikidata.org/wiki/Special:EntityData/Q2.ttl"
+        );
+    }
+
+    #[test]
+    fn join_network_path_reference_keeps_base_scheme() {
+        let base: Uri = "http://example.com/a/b".parse().unwrap();
+        let uri = join(base, "//other.example.com/c").unwrap();
+        assert_eq!(uri, "http://other.example.com/c");
+    }
+
+    #[test]
+    fn join_network_path_reference_keeps_authority_details() {
+        let base: Uri = "https://example.com/x".parse().unwrap();
+        let uri = join(base, "//other.example.com:8443/y?q=1").unwrap();
+        assert_eq!(uri, "https://other.example.com:8443/y?q=1");
     }
 }
