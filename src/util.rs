@@ -126,6 +126,7 @@ const HEX: [&str; 256] = [
 ];
 
 /// Simple impl of an array behaving like a vec.
+#[derive(Clone)]
 pub struct ArrayVec<T, const N: usize> {
     len: usize,
     arr: [T; N],
