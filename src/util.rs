@@ -172,6 +172,8 @@ impl<T, const N: usize> ArrayVec<T, N> {
     }
 
     /// Add a value T.
+    ///
+    /// Panics if the array is already full.
     pub fn push(&mut self, value: T) {
         self.arr[self.len] = value;
         self.len += 1;
