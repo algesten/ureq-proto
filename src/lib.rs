@@ -57,4 +57,4 @@ pub use close_reason::CloseReason;
 pub mod parser;
 
 #[doc(hidden)]
-pub use util::ArrayVec;
+pub use util::{ArrayVec, CapacityError};
