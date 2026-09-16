@@ -172,9 +172,22 @@ impl<T, const N: usize> ArrayVec<T, N> {
     }
 
     /// Add a value T.
+    ///
+    /// Panics if the array is already full.
     pub fn push(&mut self, value: T) {
         self.arr[self.len] = value;
         self.len += 1;
+    }
+
+    /// Try to add a value T to the end of the array.
+    ///
+    /// Returns an error if the array is already full.
+    pub fn try_push(&mut self, value: T) -> Result<(), CapacityError<T>> {
+        if self.len >= N {
+            return Err(CapacityError { element: value });
+        }
+        self.push(value);
+        Ok(())
     }
 
     /// Shorten the vec.
@@ -183,6 +196,34 @@ impl<T, const N: usize> ArrayVec<T, N> {
     pub fn truncate(&mut self, len: usize) {
         assert!(len <= self.len);
         self.len = len;
+    }
+}
+
+/// An error returned when capacity of an [`ArrayVec`] is exceeded.
+#[derive(PartialEq, Eq, Clone)]
+pub struct CapacityError<T> {
+    /// The element that triggered this error.
+    element: T,
+}
+
+impl<T> CapacityError<T> {
+    /// Returns the element that triggered this error.
+    pub fn element(self) -> T {
+        self.element
+    }
+}
+
+impl<T> std::error::Error for CapacityError<T> {}
+
+impl<T> fmt::Debug for CapacityError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CapacityError").finish()
+    }
+}
+
+impl<T> fmt::Display for CapacityError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ArrayVec capacity exceeded")
     }
 }
 
@@ -209,7 +250,7 @@ impl<'a, T, const N: usize> IntoIterator for &'a ArrayVec<T, N> {
 
 #[cfg(test)]
 mod tests {
-    use super::ArrayVec;
+    use super::{ArrayVec, CapacityError};
 
     #[test]
     fn array_vec_equality_uses_active_elements() {
@@ -256,5 +297,15 @@ mod tests {
         let values = ArrayVec::<String, 0>::default();
         assert!(values.is_empty());
         assert_eq!(values, ArrayVec::from_fn(|_| String::from("unused")));
+    }
+
+    #[test]
+    fn array_vec_try_push_checks_capacity() {
+        let mut values = ArrayVec::<_, 4>::default();
+        for i in 0..4 {
+            values.try_push(i).unwrap();
+        }
+        let err = values.try_push(1337).unwrap_err();
+        assert_eq!(err, CapacityError { element: 1337 });
     }
 }
