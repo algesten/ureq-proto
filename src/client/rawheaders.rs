@@ -20,22 +20,23 @@ pub fn header_raw(mut builder: Builder, name: &str, value: &[u8]) -> Builder {
         .headers_ref()
         .map(|h| h.get_all(name).iter().count());
     builder = builder.header(name, value);
-    if let (Some(index), Some(extensions)) = (index, builder.extensions_mut()) {
-        if extensions.get::<HeaderNames>().is_none() {
-            extensions.insert(HeaderNames::default());
-        }
-        let names = extensions.get_mut::<HeaderNames>().unwrap();
-        // The successful builder.header call above validated the name.
-        let key = HeaderName::from_bytes(name.as_bytes()).unwrap();
-        if let Some((_, _, spelling)) = names
-            .0
-            .iter_mut()
-            .find(|(n, i, _)| *n == key && *i == index)
-        {
-            *spelling = name.into();
-        } else {
-            names.0.push((key, index, name.into()));
-        }
+    let (Some(index), Some(extensions)) = (index, builder.extensions_mut()) else {
+        return builder;
+    };
+    if extensions.get::<HeaderNames>().is_none() {
+        extensions.insert(HeaderNames::default());
+    }
+    let names = extensions.get_mut::<HeaderNames>().unwrap();
+    // The successful builder.header call above validated the name.
+    let key = HeaderName::from_bytes(name.as_bytes()).unwrap();
+    if let Some((_, _, spelling)) = names
+        .0
+        .iter_mut()
+        .find(|(n, i, _)| *n == key && *i == index)
+    {
+        *spelling = name.into();
+    } else {
+        names.0.push((key, index, name.into()));
     }
     builder
 }
