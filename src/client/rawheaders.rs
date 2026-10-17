@@ -7,6 +7,9 @@ use http::request::Builder;
 /// Names and values retain the same validation as [`Builder::header`]. Values may
 /// contain non-UTF-8 bytes, but cannot contain line breaks.
 ///
+/// Distinct names follow the request header map's arbitrary iteration order.
+/// Values sharing a name retain their insertion order.
+///
 /// Spelling is associated with the appended value's position among values with
 /// the same case-insensitive name. Subsequent header mutation can change which
 /// value occupies that position. Removed headers are never restored, and headers
@@ -52,9 +55,11 @@ impl HeaderNames {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::client::{Call, RedirectAuthHeaders, state};
-    use http::{Request, Version, header};
+    use super::{HeaderNames, header_raw};
+    use crate::Error;
+    use crate::client::state::Redirect;
+    use crate::client::{Call, RedirectAuthHeaders};
+    use http::{HeaderValue, Request, StatusCode, Version, header};
 
     fn output(request: Request<()>, size: usize) -> Vec<u8> {
         let mut call = Call::new(request).unwrap().proceed();
@@ -65,6 +70,38 @@ mod tests {
             result.extend_from_slice(&buffer[..n]);
         }
         result
+    }
+
+    #[test]
+    fn typed_and_raw_headers_keep_map_order_incrementally() {
+        for raw in [false, true] {
+            let mut builder = Request::get("http://q.test");
+            for (name, value) in [
+                ("x-first", "one"),
+                ("x-remove", "gone"),
+                ("x-second", "middle"),
+                ("x-first", "two"),
+                ("x-third", "last"),
+                ("x-second", "end"),
+            ] {
+                builder = if raw {
+                    header_raw(builder, name, value.as_bytes())
+                } else {
+                    builder.header(name, value)
+                };
+            }
+            builder.headers_mut().unwrap().remove("x-remove");
+            let request = builder.body(()).unwrap();
+            let mut expected = b"GET / HTTP/1.1\r\nhost: q.test\r\n".to_vec();
+            for (name, value) in request.headers() {
+                expected.extend_from_slice(name.as_str().as_bytes());
+                expected.extend_from_slice(b": ");
+                expected.extend_from_slice(value.as_bytes());
+                expected.extend_from_slice(b"\r\n");
+            }
+            expected.extend_from_slice(b"\r\n");
+            assert_eq!(output(request, 24), expected);
+        }
     }
 
     #[test]
@@ -140,14 +177,14 @@ mod tests {
         let mut call = Call::new(request).unwrap().proceed();
         assert_eq!(
             call.write(&mut [0; 256]).unwrap_err(),
-            crate::Error::TooManyHostHeaders
+            Error::TooManyHostHeaders
         );
         let builder = header_raw(Request::post("http://q.test"), "Content-Length", b"1");
         let request = builder.header("content-length", "2").body(()).unwrap();
         let mut call = Call::new(request).unwrap().proceed();
         assert_eq!(
             call.write(&mut [0; 256]).unwrap_err(),
-            crate::Error::TooManyContentLengthHeaders
+            Error::TooManyContentLengthHeaders
         );
         let request = header_raw(Request::post("http://q.test"), "CONTENT-LENGTH", b"1, 2")
             .body(())
@@ -155,7 +192,7 @@ mod tests {
         let mut call = Call::new(request).unwrap().proceed();
         assert_eq!(
             call.write(&mut [0; 256]).unwrap_err(),
-            crate::Error::BadContentLengthHeader
+            Error::BadContentLengthHeader
         );
         let request = header_raw(Request::get("http://q.test"), "X-SECRET", b"ok")
             .version(Version::HTTP_2)
@@ -164,7 +201,7 @@ mod tests {
         let mut call = Call::new(request).unwrap().proceed();
         assert_eq!(
             call.write(&mut [0; 256]).unwrap_err(),
-            crate::Error::UnsupportedVersion
+            Error::UnsupportedVersion
         );
     }
 
@@ -180,9 +217,9 @@ mod tests {
             builder = header_raw(builder, name, value);
         }
         let call = Call::new(builder.body(()).unwrap()).unwrap();
-        let mut redirect: Call<state::Redirect> = Call::wrap(call.inner);
-        redirect.inner.status = Some(http::StatusCode::FOUND);
-        redirect.inner.location = Some(http::HeaderValue::from_static("http://other.test/"));
+        let mut redirect: Call<Redirect> = Call::wrap(call.inner);
+        redirect.inner.status = Some(StatusCode::FOUND);
+        redirect.inner.location = Some(HeaderValue::from_static("http://other.test/"));
         let mut next = redirect
             .as_new_call(RedirectAuthHeaders::Never)
             .unwrap()

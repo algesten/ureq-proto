@@ -5,6 +5,7 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, he
 
 use crate::Error;
 use crate::body::{BodyWriter, parse_content_length_value};
+use crate::client::rawheaders::HeaderNames;
 use crate::ext::MethodExt;
 use crate::util::compare_lowercase_ascii;
 
@@ -45,7 +46,7 @@ impl AmendedRequest {
     }
 
     pub fn take_request(&mut self) -> Request<()> {
-        let empty = http::Request::new(());
+        let empty = Request::new(());
         mem::replace(&mut self.request, empty)
     }
 
@@ -97,24 +98,21 @@ impl AmendedRequest {
             .chain(self.request.headers().iter())
     }
 
-    pub fn wire_headers(&self) -> impl Iterator<Item = (&str, &HeaderValue)> {
-        let names = self
-            .request
-            .extensions()
-            .get::<super::rawheaders::HeaderNames>();
-        self.headers
-            .iter()
-            .map(|(name, value)| (name.as_str(), value))
-            .chain(self.request.headers().keys().flat_map(move |name| {
-                self.request.headers().get_all(name).iter().enumerate().map(
-                    move |(index, value)| {
-                        let spelling = names
-                            .map(|names| names.get(name, index))
-                            .unwrap_or_else(|| name.as_str());
-                        (spelling, value)
-                    },
-                )
-            }))
+    pub fn raw_headers(&self) -> Option<impl Iterator<Item = (&str, &HeaderValue)>> {
+        let names = self.request.extensions().get::<HeaderNames>()?;
+        Some(
+            self.headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value))
+                .chain(self.request.headers().keys().flat_map(move |name| {
+                    self.request
+                        .headers()
+                        .get_all(name)
+                        .iter()
+                        .enumerate()
+                        .map(move |(index, value)| (names.get(name, index), value))
+                })),
+        )
     }
 
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
