@@ -5,7 +5,7 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, he
 
 use crate::Error;
 use crate::body::{BodyWriter, parse_content_length_value};
-use crate::client::rawheaders::HeaderNames;
+use crate::client::rawheaders::HeaderCasing;
 use crate::ext::MethodExt;
 use crate::util::compare_lowercase_ascii;
 
@@ -99,7 +99,7 @@ impl AmendedRequest {
     }
 
     pub fn raw_headers(&self) -> Option<impl Iterator<Item = (&str, &HeaderValue)>> {
-        let names = self.request.extensions().get::<HeaderNames>()?;
+        let casing = self.request.extensions().get::<HeaderCasing>()?;
         Some(
             self.headers
                 .iter()
@@ -110,7 +110,7 @@ impl AmendedRequest {
                         .get_all(name)
                         .iter()
                         .enumerate()
-                        .map(move |(index, value)| (names.get(name, index), value))
+                        .map(move |(index, value)| (casing.get(name, index), value))
                 })),
         )
     }
