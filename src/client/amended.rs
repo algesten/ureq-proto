@@ -37,6 +37,35 @@ pub(crate) struct AmendedRequest {
     headers: Vec<(HeaderName, HeaderValue)>,
 }
 
+enum RawHeaders<N, R> {
+    Normal(N),
+    Raw(R),
+}
+
+impl<N, R> Iterator for RawHeaders<N, R>
+where
+    N: Iterator,
+    R: Iterator<Item = N::Item>,
+{
+    type Item = N::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            RawHeaders::Normal(headers) => headers.next(),
+            RawHeaders::Raw(headers) => headers.next(),
+        }
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self {
+            RawHeaders::Normal(headers) => headers.nth(n),
+            RawHeaders::Raw(headers) => headers.nth(n),
+        }
+    }
+}
+
 impl AmendedRequest {
     pub fn new(request: Request<()>) -> Self {
         AmendedRequest {
@@ -98,9 +127,12 @@ impl AmendedRequest {
             .chain(self.request.headers().iter())
     }
 
-    pub fn raw_headers(&self) -> Option<impl Iterator<Item = (&str, &HeaderValue)>> {
-        let casing = self.request.extensions().get::<HeaderCasing>()?;
-        Some(
+    /// Iterate over all headers with the name casing used for transmission.
+    pub fn raw_headers(&self) -> impl Iterator<Item = (&str, &HeaderValue)> {
+        let Some(casing) = self.request.extensions().get::<HeaderCasing>() else {
+            return RawHeaders::Normal(self.headers().map(|(name, value)| (name.as_str(), value)));
+        };
+        RawHeaders::Raw(
             self.headers
                 .iter()
                 .map(|(name, value)| (name.as_str(), value))

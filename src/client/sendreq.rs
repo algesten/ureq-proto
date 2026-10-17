@@ -223,15 +223,8 @@ fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &m
             let header_count = request.headers_len();
 
             if header_count > 0 {
-                if let Some(headers) = request.raw_headers() {
-                    do_write_headers(headers.skip(*index), index, header_count - 1, w);
-                } else {
-                    // Keep ordinary requests on the direct header iterator.
-                    let headers = request
-                        .headers()
-                        .map(|(name, value)| (name.as_str(), value));
-                    do_write_headers(headers.skip(*index), index, header_count - 1, w);
-                }
+                let headers = request.raw_headers().skip(*index);
+                do_write_headers(headers, index, header_count - 1, w);
             }
 
             if *index == header_count {
