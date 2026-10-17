@@ -5,6 +5,7 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, he
 
 use crate::Error;
 use crate::body::{BodyWriter, parse_content_length_value};
+use crate::client::rawheaders::HeaderCasing;
 use crate::ext::MethodExt;
 use crate::util::compare_lowercase_ascii;
 
@@ -36,6 +37,35 @@ pub(crate) struct AmendedRequest {
     headers: Vec<(HeaderName, HeaderValue)>,
 }
 
+enum AllHeaders<N, R> {
+    Normal(N),
+    Raw(R),
+}
+
+impl<N, R> Iterator for AllHeaders<N, R>
+where
+    N: Iterator,
+    R: Iterator<Item = N::Item>,
+{
+    type Item = N::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            AllHeaders::Normal(headers) => headers.next(),
+            AllHeaders::Raw(headers) => headers.next(),
+        }
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self {
+            AllHeaders::Normal(headers) => headers.nth(n),
+            AllHeaders::Raw(headers) => headers.nth(n),
+        }
+    }
+}
+
 impl AmendedRequest {
     pub fn new(request: Request<()>) -> Self {
         AmendedRequest {
@@ -45,7 +75,7 @@ impl AmendedRequest {
     }
 
     pub fn take_request(&mut self) -> Request<()> {
-        let empty = http::Request::new(());
+        let empty = Request::new(());
         mem::replace(&mut self.request, empty)
     }
 
@@ -95,6 +125,26 @@ impl AmendedRequest {
             .iter()
             .map(|v| (&v.0, &v.1))
             .chain(self.request.headers().iter())
+    }
+
+    /// Iterate over all headers with the name casing used for transmission.
+    pub fn all_headers(&self) -> impl Iterator<Item = (&str, &HeaderValue)> {
+        let Some(casing) = self.request.extensions().get::<HeaderCasing>() else {
+            return AllHeaders::Normal(self.headers().map(|(name, value)| (name.as_str(), value)));
+        };
+        AllHeaders::Raw(
+            self.headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value))
+                .chain(self.request.headers().keys().flat_map(move |name| {
+                    self.request
+                        .headers()
+                        .get_all(name)
+                        .iter()
+                        .enumerate()
+                        .map(move |(index, value)| (casing.get(name, index), value))
+                })),
+        )
     }
 
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
