@@ -223,7 +223,7 @@ fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &m
             let header_count = request.headers_len();
 
             if header_count > 0 {
-                let headers = request.raw_headers().skip(*index);
+                let headers = request.all_headers().skip(*index);
                 do_write_headers(headers, index, header_count - 1, w);
             }
 
