@@ -233,6 +233,9 @@ use crate::util::ArrayVec;
 use amended::AmendedRequest;
 
 mod amended;
+mod rawheaders;
+
+pub use rawheaders::header_raw;
 
 // mod holder;
 

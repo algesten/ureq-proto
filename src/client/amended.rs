@@ -97,6 +97,26 @@ impl AmendedRequest {
             .chain(self.request.headers().iter())
     }
 
+    pub fn wire_headers(&self) -> impl Iterator<Item = (&str, &HeaderValue)> {
+        let names = self
+            .request
+            .extensions()
+            .get::<super::rawheaders::HeaderNames>();
+        self.headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value))
+            .chain(self.request.headers().keys().flat_map(move |name| {
+                self.request.headers().get_all(name).iter().enumerate().map(
+                    move |(index, value)| {
+                        let spelling = names
+                            .map(|names| names.get(name, index))
+                            .unwrap_or_else(|| name.as_str());
+                        (spelling, value)
+                    },
+                )
+            }))
+    }
+
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
         self.headers()
             .filter(move |(k, _)| *k == key)

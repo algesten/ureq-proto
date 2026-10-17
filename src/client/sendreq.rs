@@ -3,7 +3,7 @@ use std::io::Write;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use http::uri::Scheme;
-use http::{HeaderMap, HeaderName, HeaderValue, Method, Uri, Version, header};
+use http::{HeaderMap, HeaderValue, Method, Uri, Version, header};
 
 use crate::Error;
 use crate::client::amended::AmendedRequest;
@@ -221,7 +221,7 @@ fn try_write_prelude_part(request: &AmendedRequest, state: &mut BodyState, w: &m
 
         RequestPhase::Headers(index) => {
             let header_count = request.headers_len();
-            let all = request.headers();
+            let all = request.wire_headers();
             let skipped = all.skip(*index);
 
             if header_count > 0 {
@@ -250,7 +250,7 @@ fn do_write_send_line(line: (&Method, &str, Version), w: &mut Writer) -> bool {
 
 fn do_write_headers<'a, I>(headers: I, index: &mut usize, last_index: usize, w: &mut Writer)
 where
-    I: Iterator<Item = (&'a HeaderName, &'a HeaderValue)>,
+    I: Iterator<Item = (&'a str, &'a HeaderValue)>,
 {
     for h in headers {
         let success = w.try_write(|w| {
