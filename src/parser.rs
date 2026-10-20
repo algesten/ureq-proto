@@ -62,7 +62,9 @@ pub fn try_parse_response<const N: usize>(
         builder = builder.header(h.name, h.value);
     }
 
-    let response = builder.body(()).expect("a valid response");
+    let response = builder
+        .body(())
+        .map_err(|e| Error::HttpParseFail(e.to_string()))?;
 
     Ok(Some((input_used, response)))
 }
@@ -133,7 +135,9 @@ pub fn try_parse_partial_response<const N: usize>(
         builder = builder.header(h.name, h.value);
     }
 
-    let response = builder.body(()).expect("a valid response");
+    let response = builder
+        .body(())
+        .map_err(|e| Error::HttpParseFail(e.to_string()))?;
 
     Ok(Some(response))
 }
@@ -244,6 +248,28 @@ mod test {
     fn error_on_invalid_status_code_partial() {
         let bytes = "HTTP/1.1 000 NOK\r\n";
         try_parse_partial_response::<20>(bytes.as_bytes()).expect_err("invalid status code");
+    }
+
+    fn response_with_header_name_len(len: usize) -> String {
+        format!("HTTP/1.1 200 OK\r\n{}: x\r\n\r\n", "a".repeat(len))
+    }
+
+    #[test]
+    fn error_on_too_long_header_name() {
+        let bytes = response_with_header_name_len(65_535);
+        try_parse_response::<20>(bytes.as_bytes()).expect("longest valid name");
+
+        let bytes = response_with_header_name_len(65_536);
+        try_parse_response::<20>(bytes.as_bytes()).expect_err("too long header name");
+    }
+
+    #[test]
+    fn error_on_too_long_header_name_partial() {
+        let bytes = response_with_header_name_len(65_535);
+        try_parse_partial_response::<20>(bytes.as_bytes()).expect("longest valid name");
+
+        let bytes = response_with_header_name_len(65_536);
+        try_parse_partial_response::<20>(bytes.as_bytes()).expect_err("too long header name");
     }
 
     #[test]
