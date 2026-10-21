@@ -84,9 +84,21 @@ impl Call<Redirect> {
         // Mutate the original request to remove headers we cannot keep in the redirect.
         let headers = request.headers_mut();
         if !keep_auth_header {
+            // Authorization is named in RFC 9110 §15.4 as a header to consider
+            // removing on redirect for security reasons.
             headers.remove(header::AUTHORIZATION);
+            // Proxy-Authorization is hop-scoped per RFC 9110 §11.7.2 ("applies only
+            // to the next inbound proxy"), and §15.4 lists it among headers to drop
+            // when redirecting.
+            headers.remove(header::PROXY_AUTHORIZATION);
         }
+        // Cookie is named alongside Authorization in RFC 9110 §15.4. Cookies for
+        // the redirect target are sourced from the cookie jar against the new URI,
+        // not carried from the previous request.
         headers.remove(header::COOKIE);
+        // Content-Length describes the body of the previous request. The redirect
+        // either changes method (e.g. POST -> GET, dropping the body entirely) or
+        // re-derives the length from a fresh body, so the old value cannot apply.
         headers.remove(header::CONTENT_LENGTH);
 
         // Next state

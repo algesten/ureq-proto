@@ -348,6 +348,85 @@ fn dont_keep_auth_header_different_host() {
 }
 
 #[test]
+fn dont_keep_proxy_auth_header_never() {
+    let scenario = Scenario::builder()
+        .get("https://a.test/foo")
+        .header("proxy-authorization", "some secret")
+        .redirect(StatusCode::FOUND, "https://a.test/bar")
+        .build();
+
+    let mut call = scenario
+        .to_redirect()
+        .as_new_call(RedirectAuthHeaders::Never)
+        .unwrap()
+        .unwrap()
+        .proceed();
+
+    let mut o = vec![0; 1024];
+
+    let n = call.write(&mut o).unwrap();
+
+    let cmp = "\
+            GET /bar HTTP/1.1\r\n\
+            host: a.test\r\n\
+            \r\n";
+    assert_eq!(o[..n].as_str(), cmp);
+}
+
+#[test]
+fn keep_proxy_auth_header_same_host() {
+    let scenario = Scenario::builder()
+        .get("https://a.test:123/foo")
+        .header("proxy-authorization", "some secret")
+        .redirect(StatusCode::FOUND, "https://a.test:234/bar")
+        .build();
+
+    let mut call = scenario
+        .to_redirect()
+        .as_new_call(RedirectAuthHeaders::SameHost)
+        .unwrap()
+        .unwrap()
+        .proceed();
+
+    let mut o = vec![0; 1024];
+
+    let n = call.write(&mut o).unwrap();
+
+    let cmp = "\
+            GET /bar HTTP/1.1\r\n\
+            host: a.test:234\r\n\
+            proxy-authorization: some secret\r\n\
+            \r\n";
+    assert_eq!(o[..n].as_str(), cmp);
+}
+
+#[test]
+fn dont_keep_proxy_auth_header_different_host() {
+    let scenario = Scenario::builder()
+        .get("https://a.test/foo")
+        .header("proxy-authorization", "some secret")
+        .redirect(StatusCode::FOUND, "https://b.test/bar")
+        .build();
+
+    let mut call = scenario
+        .to_redirect()
+        .as_new_call(RedirectAuthHeaders::SameHost)
+        .unwrap()
+        .unwrap()
+        .proceed();
+
+    let mut o = vec![0; 1024];
+
+    let n = call.write(&mut o).unwrap();
+
+    let cmp = "\
+            GET /bar HTTP/1.1\r\n\
+            host: b.test\r\n\
+            \r\n";
+    assert_eq!(o[..n].as_str(), cmp);
+}
+
+#[test]
 fn dont_keep_cookie_header() {
     let scenario = Scenario::builder()
         .get("https://a.test/foo")
