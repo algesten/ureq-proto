@@ -1,4 +1,4 @@
-use http::{Method, Request, Response, StatusCode, Version};
+use http::{HeaderName, Method, Request, Response, StatusCode, Version};
 use httparse::Status;
 
 use crate::Error;
@@ -59,12 +59,12 @@ pub fn try_parse_response<const N: usize>(
     let mut builder = Response::builder().version(version).status(status);
 
     for h in res.headers {
-        builder = builder.header(h.name, h.value);
+        let name = HeaderName::from_bytes(h.name.as_bytes())
+            .map_err(|e| Error::HttpParseFail(e.to_string()))?;
+        builder = builder.header(name, h.value);
     }
 
-    let response = builder
-        .body(())
-        .map_err(|e| Error::HttpParseFail(e.to_string()))?;
+    let response = builder.body(()).expect("a valid response");
 
     Ok(Some((input_used, response)))
 }
@@ -132,12 +132,12 @@ pub fn try_parse_partial_response<const N: usize>(
         if h.name.is_empty() {
             break;
         }
-        builder = builder.header(h.name, h.value);
+        let name = HeaderName::from_bytes(h.name.as_bytes())
+            .map_err(|e| Error::HttpParseFail(e.to_string()))?;
+        builder = builder.header(name, h.value);
     }
 
-    let response = builder
-        .body(())
-        .map_err(|e| Error::HttpParseFail(e.to_string()))?;
+    let response = builder.body(()).expect("a valid response");
 
     Ok(Some(response))
 }
