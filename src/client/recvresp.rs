@@ -3,7 +3,7 @@ use http::{HeaderValue, Response, StatusCode, Version, header};
 use crate::Error;
 use crate::body::BodyReader;
 use crate::ext::HeaderIterExt;
-use crate::parser::{try_parse_partial_response, try_parse_response};
+use crate::parser::{try_parse_partial_response, try_parse_response_unfolding};
 use crate::util::log_data;
 
 use super::MAX_RESPONSE_HEADERS;
@@ -92,7 +92,8 @@ impl Call<RecvResponse> {
         allow_partial_redirect: bool,
     ) -> Result<Option<(usize, Response<()>)>, Error> {
         // ~3k for 100 headers
-        let (input_used, response) = match try_parse_response::<MAX_RESPONSE_HEADERS>(input)? {
+        let parsed = try_parse_response_unfolding::<MAX_RESPONSE_HEADERS>(input)?;
+        let (input_used, response) = match parsed {
             Some(v) => v,
             None => {
                 // The caller decides whether to allow a partial parse.

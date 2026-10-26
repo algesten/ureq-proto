@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use http::{HeaderName, Method, Request, Response, StatusCode, Version};
 use httparse::Status;
 
@@ -19,11 +21,33 @@ use crate::Error;
 pub fn try_parse_response<const N: usize>(
     input: &[u8],
 ) -> Result<Option<(usize, Response<()>)>, Error> {
+    parse_response::<N>(input, false)
+}
+
+/// Like [`try_parse_response`], but accepts header values continued on the next
+/// line (obs-fold), replacing the line breaks with spaces.
+///
+/// A user agent must do this when receiving a response (RFC 9112 section 5.2).
+/// [`try_parse_response`] doesn't, since with obs-folds allowed the parser can't
+/// finish a header line until it has seen the start of the next one.
+pub(crate) fn try_parse_response_unfolding<const N: usize>(
+    input: &[u8],
+) -> Result<Option<(usize, Response<()>)>, Error> {
+    parse_response::<N>(input, true)
+}
+
+fn parse_response<const N: usize>(
+    input: &[u8],
+    allow_obs_fold: bool,
+) -> Result<Option<(usize, Response<()>)>, Error> {
     let mut headers = [httparse::EMPTY_HEADER; N]; // 100 headers ~3kb
 
     let mut res = httparse::Response::new(&mut headers);
 
-    let maybe_input_used = match res.parse(input) {
+    let mut config = httparse::ParserConfig::default();
+    config.allow_obsolete_multiline_headers_in_responses(allow_obs_fold);
+
+    let maybe_input_used = match config.parse_response(&mut res, input) {
         Ok(v) => v,
         Err(e) => {
             return Err(if e == httparse::Error::TooManyHeaders {
@@ -61,12 +85,29 @@ pub fn try_parse_response<const N: usize>(
     for h in res.headers {
         let name = HeaderName::from_bytes(h.name.as_bytes())
             .map_err(|e| Error::HttpParseFail(e.to_string()))?;
-        builder = builder.header(name, h.value);
+        builder = builder.header(name, &*unfold(h.value));
     }
 
     let response = builder.body(()).expect("a valid response");
 
     Ok(Some((input_used, response)))
+}
+
+/// Replace the line breaks of obs-folds in a header value with spaces.
+///
+/// The parser keeps them in the value, but they are not allowed in a
+/// [`http::HeaderValue`].
+fn unfold(value: &[u8]) -> Cow<'_, [u8]> {
+    if value.iter().any(|b| *b == b'\r' || *b == b'\n') {
+        Cow::Owned(
+            value
+                .iter()
+                .map(|b| if *b == b'\r' || *b == b'\n' { b' ' } else { *b })
+                .collect(),
+        )
+    } else {
+        Cow::Borrowed(value)
+    }
 }
 
 /// Convert a status code parsed by httparse into a [`StatusCode`].
@@ -213,7 +254,26 @@ pub fn try_parse_request<const N: usize>(
 
 #[cfg(test)]
 mod test {
-    use crate::parser::{try_parse_partial_response, try_parse_request, try_parse_response};
+    use crate::parser::{
+        try_parse_partial_response, try_parse_request, try_parse_response,
+        try_parse_response_unfolding,
+    };
+
+    #[test]
+    fn obs_fold_in_response_header() {
+        let bytes = "HTTP/1.1 200 OK\r\n\
+            X-Folded: a\r\n  b\r\n\
+            Content-Length: 5\r\n\r\nhello";
+
+        let (used, res) = try_parse_response_unfolding::<10>(bytes.as_bytes())
+            .unwrap()
+            .unwrap();
+        assert_eq!(used, bytes.len() - 5);
+        assert_eq!(res.headers().get("x-folded").unwrap(), "a    b");
+        assert_eq!(res.headers().get("content-length").unwrap(), "5");
+
+        try_parse_response::<10>(bytes.as_bytes()).expect_err("obs-fold not allowed");
+    }
 
     #[test]
     fn ensure_no_half_response() {

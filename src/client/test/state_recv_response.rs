@@ -53,6 +53,31 @@ fn receive_complete_response() {
 }
 
 #[test]
+fn receive_response_with_obs_fold() {
+    // RFC 9112 section 5.2: a user agent must accept a header value continued
+    // on the next line and replace the line break with spaces.
+    let input: &[u8] = b"\
+        HTTP/1.1 200 OK\r\n\
+        X-Folded: a\r\n  b\r\n\
+        Content-Length: 123\r\n\
+        \r\n";
+
+    let scenario = Scenario::builder().get("https://q.test").build();
+    let mut call = scenario.to_recv_response();
+
+    let (input_used, maybe_response) = call.try_response(input, true).unwrap();
+    assert_eq!(input_used, input.len());
+
+    let response = maybe_response.unwrap();
+    assert_eq!(response.headers().get("x-folded").unwrap(), "a    b");
+    assert_eq!(
+        response.headers().get(header::CONTENT_LENGTH).unwrap(),
+        "123"
+    );
+    assert!(call.can_proceed());
+}
+
+#[test]
 fn partial_redirect_with_empty_header_value() {
     // Broken servers may omit the final \r\n of a redirect. With
     // allow_partial_redirect we accept the redirect from the partial
