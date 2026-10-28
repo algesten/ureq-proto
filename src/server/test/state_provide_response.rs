@@ -230,3 +230,57 @@ fn provide_response_with_content_length_list_is_rejected() {
         Error::BadContentLengthHeader | Error::TooManyContentLengthHeaders
     ));
 }
+
+#[test]
+fn representation_headers_without_body() {
+    for (method, status) in [("HEAD", 200), ("GET", 304)] {
+        for (name, value) in [
+            ("content-length", "1048576"),
+            ("transfer-encoding", "chunked"),
+            ("content-length", "0"),
+        ] {
+            let scenario = Scenario::builder()
+                .method(method.parse().unwrap(), "/")
+                .build();
+            let response = Response::builder()
+                .status(status)
+                .header(name, value)
+                .body(())
+                .unwrap();
+            let mut reply = scenario.to_provide_response().provide(response).unwrap();
+            let mut output = [0; 1024];
+            let n = reply.write(&mut output).unwrap();
+            let head = std::str::from_utf8(&output[..n]).unwrap();
+            assert!(head.contains(&format!("{name}: {value}\r\n")));
+            assert!(head.ends_with("\r\n\r\n"));
+            assert!(reply.is_finished());
+            assert!(matches!(
+                reply.proceed(),
+                crate::server::SendResponseResult::Cleanup(_)
+            ));
+        }
+    }
+}
+
+#[test]
+fn forbidden_status_body_headers_still_rejected() {
+    for method in ["GET", "HEAD"] {
+        for status in [100, 101, 204] {
+            let scenario = Scenario::builder()
+                .method(method.parse().unwrap(), "/")
+                .build();
+            let response = Response::builder()
+                .status(status)
+                .header("content-length", "1048576")
+                .body(())
+                .unwrap();
+            assert_eq!(
+                scenario
+                    .to_provide_response()
+                    .provide(response)
+                    .unwrap_err(),
+                Error::BodyNotAllowed
+            );
+        }
+    }
+}

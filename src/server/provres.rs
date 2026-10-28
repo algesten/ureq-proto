@@ -1,4 +1,6 @@
-use http::{Response, header};
+use http::{Method, Response, header};
+
+use crate::body::BodyWriter;
 
 use crate::body::response_body_allowed;
 use crate::{CloseReason, Error};
@@ -45,7 +47,12 @@ impl Reply<ProvideResponse> {
 
         let should_send_body = body_allowed || force_send;
 
-        if body_provided && !should_send_body {
+        // HEAD and 304 may describe the selected representation without sending it.
+        // 1xx and 204 keep rejecting body headers.
+        let metadata_only =
+            status == 304 || (method == Method::HEAD && status >= 200 && status != 204);
+
+        if body_provided && !should_send_body && !metadata_only {
             // User set a body header but method does not allow one
             return Err(Error::BodyNotAllowed);
         }
@@ -56,7 +63,11 @@ impl Reply<ProvideResponse> {
             response.set_header(header.0, header.1)?;
         }
 
-        inner.state.writer = Some(info.body_mode);
+        inner.state.writer = Some(if metadata_only && !force_send {
+            BodyWriter::new_none()
+        } else {
+            info.body_mode
+        });
 
         Ok(Reply::wrap(inner))
     }
