@@ -120,16 +120,11 @@ fn http10_response_without_body_must_close() {
 
 #[test]
 fn amended_connection_close_must_close() {
-    let mut call = Scenario::builder()
-        .get("https://a.test")
-        .build()
-        .to_prepare();
+    let scenario = Scenario::builder().get("https://a.test").build();
+    let mut call = scenario.to_prepare();
     call.header("connection", "keep-alive, Close").unwrap();
-    assert!(
-        call.inner()
-            .close_reason
-            .contains(&CloseReason::ClientConnectionClose)
-    );
+    let reasons = &call.inner().close_reason;
+    assert!(reasons.contains(&CloseReason::ClientConnectionClose));
 }
 
 #[test]
@@ -141,11 +136,8 @@ fn successful_connect_is_not_reusable() {
             .build();
         let call = scenario.to_cleanup();
         assert!(call.must_close_connection());
-        assert!(
-            call.inner()
-                .close_reason
-                .contains(&CloseReason::ConnectTunnel)
-        );
+        let reasons = &call.inner().close_reason;
+        assert!(reasons.contains(&CloseReason::ConnectTunnel));
     }
 }
 

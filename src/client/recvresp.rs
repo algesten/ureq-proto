@@ -63,7 +63,8 @@ impl Call<RecvResponse> {
         }
 
         self.inner.status = Some(response.status());
-        if self.inner.request.method() == http::Method::CONNECT && response.status().is_success() {
+        let is_connect = self.inner.request.method() == http::Method::CONNECT;
+        if is_connect && status.is_success() {
             self.inner.close_reason.push(CloseReason::ConnectTunnel);
         }
         // We want the last Location header.
@@ -74,19 +75,15 @@ impl Call<RecvResponse> {
             .next_back()
             .cloned();
 
-        if response.headers().iter().has(header::CONNECTION, "close") {
-            self.inner
-                .close_reason
-                .push(CloseReason::ServerConnectionClose);
-        } else if response.version() == Version::HTTP_10
-            && !response
-                .headers()
-                .iter()
-                .has(header::CONNECTION, "keep-alive")
-        {
-            self.inner
-                .close_reason
-                .push(CloseReason::Http10DefaultClose);
+        let headers = response.headers();
+        let has_close = headers.iter().has(header::CONNECTION, "close");
+        let has_keep_alive = headers.iter().has(header::CONNECTION, "keep-alive");
+        let is_http10 = response.version() == Version::HTTP_10;
+        let close_reasons = &mut self.inner.close_reason;
+        if has_close {
+            close_reasons.push(CloseReason::ServerConnectionClose);
+        } else if is_http10 && !has_keep_alive {
+            close_reasons.push(CloseReason::Http10DefaultClose);
         }
 
         Ok((input_used, Some(response)))
