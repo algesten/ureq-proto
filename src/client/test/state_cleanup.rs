@@ -119,6 +119,61 @@ fn http10_response_without_body_must_close() {
 }
 
 #[test]
+fn amended_connection_close_must_close() {
+    let mut call = Scenario::builder()
+        .get("https://a.test")
+        .build()
+        .to_prepare();
+    call.header("connection", "keep-alive, Close").unwrap();
+    assert!(
+        call.inner()
+            .close_reason
+            .contains(&CloseReason::ClientConnectionClose)
+    );
+}
+
+#[test]
+fn successful_connect_is_not_reusable() {
+    for status in [StatusCode::OK, StatusCode::NO_CONTENT] {
+        let scenario = Scenario::builder()
+            .connect("https://a.test")
+            .response(Response::builder().status(status).body(()).unwrap())
+            .build();
+        let call = scenario.to_cleanup();
+        assert!(call.must_close_connection());
+        assert!(
+            call.inner()
+                .close_reason
+                .contains(&CloseReason::ConnectTunnel)
+        );
+    }
+}
+
+#[test]
+fn unframed_redirect_is_close_delimited() {
+    let scenario = Scenario::builder()
+        .get("https://a.test")
+        .response(
+            Response::builder()
+                .status(StatusCode::FOUND)
+                .header("location", "/next")
+                .body(())
+                .unwrap(),
+        )
+        .build();
+    let mut body = scenario.to_recv_body();
+    assert_eq!(body.body_mode(), crate::BodyMode::CloseDelimited);
+    let mut output = [0; 16];
+    let (consumed, written) = body.read(b"redirect body", &mut output).unwrap();
+    assert_eq!(consumed, 13);
+    assert_eq!(&output[..written], b"redirect body");
+    let crate::client::RecvBodyResult::Redirect(call) = body.proceed().unwrap() else {
+        panic!("expected redirect")
+    };
+    assert!(call.must_close_connection());
+}
+
+#[test]
 fn close_due_to_client_connection_close() {
     let scenario = Scenario::builder()
         .get("https://a.test")

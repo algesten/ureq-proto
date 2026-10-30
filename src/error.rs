@@ -139,8 +139,13 @@ mod tests_client {
         let (_, _) = call.try_response(response, false)?;
 
         // Proceed to Redirect state
-        let RecvResponseResult::Redirect(call) = call.proceed().unwrap() else {
-            panic!("Expected RecvResponseResult::Redirect");
+        let call = match call.proceed().unwrap() {
+            RecvResponseResult::Redirect(call) => call,
+            RecvResponseResult::RecvBody(call) => match call.proceed().unwrap() {
+                crate::client::RecvBodyResult::Redirect(call) => call,
+                _ => panic!("Expected redirect"),
+            },
+            _ => panic!("Expected redirect"),
         };
 
         Ok((call, output))

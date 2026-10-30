@@ -63,6 +63,9 @@ impl Call<RecvResponse> {
         }
 
         self.inner.status = Some(response.status());
+        if self.inner.request.method() == http::Method::CONNECT && response.status().is_success() {
+            self.inner.close_reason.push(CloseReason::ConnectTunnel);
+        }
         // We want the last Location header.
         self.inner.location = response
             .headers()

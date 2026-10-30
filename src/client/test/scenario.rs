@@ -298,6 +298,7 @@ impl ScenarioBuilder<WithReq> {
         let r = Response::builder()
             .status(status)
             .header("location", location)
+            .header("content-length", "0")
             .body(())
             .unwrap();
         self.response(r)
@@ -338,6 +339,7 @@ impl ScenarioBuilder<WithRes> {
         let body = body.as_ref().to_vec();
         let len = body.len();
         self.recv_body = body;
+        self.response.headers_mut().remove("content-length");
 
         let (k, v) = if chunked {
             ("transfer-encoding", "chunked".to_string())

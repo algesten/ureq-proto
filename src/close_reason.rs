@@ -11,6 +11,7 @@ pub enum CloseReason {
     ServerConnectionClose,
 
     /// HTTP/1.0 response did not opt in to persistent connections.
+    /// See [RFC 9112 §9.3](https://www.rfc-editor.org/rfc/rfc9112#section-9.3).
     Http10DefaultClose,
 
     /// When doing expect-100 the server sent _some other response_.
@@ -28,10 +29,15 @@ pub enum CloseReason {
     /// because it's now using a different protocol (e.g., WebSocket, HTTP/2).
     ProtocolSwitch,
 
+    /// A successful CONNECT changed the connection into a tunnel.
+    /// See [RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112#section-6.3).
+    ConnectTunnel,
+
     /// Response body is close delimited.
     ///
     /// We do not know how much body data to receive. The socket will be closed
     /// when it's done. This is HTTP/1.0 semantics.
+    /// See [RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112#section-6.3).
     CloseDelimitedBody,
 }
 
@@ -43,6 +49,7 @@ impl CloseReason {
             CloseReason::Http10DefaultClose => "HTTP/1.0 response without Connection: keep-alive",
             CloseReason::Not100Continue => "non-100 response before body",
             CloseReason::ProtocolSwitch => "protocol switched via 101",
+            CloseReason::ConnectTunnel => "connection became a CONNECT tunnel",
             CloseReason::CloseDelimitedBody => "response body is close delimited",
         }
     }

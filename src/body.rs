@@ -306,7 +306,10 @@ impl BodyReader {
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
 
         // Are we allowed to receive a body?
-        let body_allowed = response_body_allowed(method, status_code, header_defined.body_mode());
+        // A redirect without framing is close-delimited, not necessarily bodyless:
+        // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
+        let body_allowed = response_body_allowed(method, status_code, header_defined.body_mode())
+            || ((300..=399).contains(&status_code) && status_code != 304 && method != Method::HEAD);
 
         if body_mode_defined && (body_allowed || force_recv) {
             // Response contains a body header (even Content-Length: 0)

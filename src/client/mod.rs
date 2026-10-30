@@ -302,7 +302,7 @@ pub(crate) struct Inner {
     pub request: AmendedRequest,
     pub analyzed: bool,
     pub state: BodyState,
-    pub close_reason: ArrayVec<CloseReason, 4>,
+    pub close_reason: ArrayVec<CloseReason, 6>,
     pub force_recv_body: bool,
     pub force_send_body: bool,
     pub await_100_continue: bool,
