@@ -81,7 +81,7 @@ impl Call<Prepare> {
         self.inner.state.allow_non_standard_methods = v;
     }
 
-    /// Add more headers to the call
+    /// Add more headers to the call.
     pub fn header<K, V>(&mut self, key: K, value: V) -> Result<(), Error>
     where
         HeaderName: TryFrom<K>,
@@ -89,7 +89,16 @@ impl Call<Prepare> {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        self.inner.request.set_header(key, value)
+        self.inner.request.set_header(key, value)?;
+        // https://www.rfc-editor.org/rfc/rfc9112#section-9.6
+        let headers = self.inner.request.headers();
+        let has_close = headers.has(header::CONNECTION, "close");
+        let reason = CloseReason::ClientConnectionClose;
+        let already_marked = self.inner.close_reason.contains(&reason);
+        if has_close && !already_marked {
+            self.inner.close_reason.push(reason);
+        }
+        Ok(())
     }
 
     /// Convert the state to send body despite method.

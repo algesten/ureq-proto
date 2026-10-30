@@ -79,6 +79,24 @@ fn partial_redirect_with_empty_header_value() {
 }
 
 #[test]
+fn accepted_partial_redirect_does_not_wait_for_eof() {
+    let scenario = Scenario::builder().get("https://q.test").build();
+    let mut call = scenario.to_recv_response();
+    let input = b"HTTP/1.1 302 Found\r\nLocation: /other\r\n";
+    let (used, response) = call.try_response(input, true).unwrap();
+    assert_eq!(used, input.len());
+    assert!(response.is_some());
+
+    // The opt-in partial-header workaround must follow immediately: a server
+    // omitting the final CRLF may leave its socket open indefinitely. Since
+    // the header boundary is missing, subsequent bytes cannot be read as body.
+    let crate::client::RecvResponseResult::Redirect(call) = call.proceed().unwrap() else {
+        panic!("accepted partial redirect must not wait for a response body or EOF");
+    };
+    assert!(call.must_close_connection());
+}
+
+#[test]
 fn prepended_100_continue() {
     // In the case of expect-100-continue, there's a chance the 100-continue
     // arrives after we started sending the request body, in which case

@@ -63,6 +63,10 @@ impl Call<RecvResponse> {
         }
 
         self.inner.status = Some(response.status());
+        let is_connect = self.inner.request.method() == http::Method::CONNECT;
+        if is_connect && status.is_success() {
+            self.inner.close_reason.push(CloseReason::ConnectTunnel);
+        }
         // We want the last Location header.
         self.inner.location = response
             .headers()
@@ -71,10 +75,15 @@ impl Call<RecvResponse> {
             .next_back()
             .cloned();
 
-        if response.headers().iter().has(header::CONNECTION, "close") {
-            self.inner
-                .close_reason
-                .push(CloseReason::ServerConnectionClose);
+        let headers = response.headers();
+        let has_close = headers.iter().has(header::CONNECTION, "close");
+        let has_keep_alive = headers.iter().has(header::CONNECTION, "keep-alive");
+        let is_http10 = response.version() == Version::HTTP_10;
+        let close_reasons = &mut self.inner.close_reason;
+        if has_close {
+            close_reasons.push(CloseReason::ServerConnectionClose);
+        } else if is_http10 && !has_keep_alive {
+            close_reasons.push(CloseReason::Http10DefaultClose);
         }
 
         Ok((input_used, Some(response)))
@@ -124,7 +133,10 @@ impl Call<RecvResponse> {
                 r.headers_mut()
                     .insert(header::CONNECTION, HeaderValue::from_static("close"));
 
-                (input.len(), r)
+                // Without a complete header boundary we cannot read a body.
+                // This opt-in workaround follows immediately and closes the socket.
+                self.inner.state.reader = Some(BodyReader::NoBody);
+                return Ok(Some((input.len(), r)));
             }
         };
 
