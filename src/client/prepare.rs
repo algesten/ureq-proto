@@ -91,19 +91,12 @@ impl Call<Prepare> {
     {
         self.inner.request.set_header(key, value)?;
         // https://www.rfc-editor.org/rfc/rfc9112#section-9.6
-        if self
-            .inner
-            .request
-            .headers()
-            .has(header::CONNECTION, "close")
-            && !self
-                .inner
-                .close_reason
-                .contains(&CloseReason::ClientConnectionClose)
-        {
-            self.inner
-                .close_reason
-                .push(CloseReason::ClientConnectionClose);
+        let headers = self.inner.request.headers();
+        let has_close = headers.has(header::CONNECTION, "close");
+        let reason = CloseReason::ClientConnectionClose;
+        let already_marked = self.inner.close_reason.contains(&reason);
+        if has_close && !already_marked {
+            self.inner.close_reason.push(reason);
         }
         Ok(())
     }
