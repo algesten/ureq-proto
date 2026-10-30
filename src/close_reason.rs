@@ -10,6 +10,9 @@ pub enum CloseReason {
     /// Server sent `connection: close`.
     ServerConnectionClose,
 
+    /// HTTP/1.0 response did not opt in to persistent connections.
+    Http10DefaultClose,
+
     /// When doing expect-100 the server sent _some other response_.
     ///
     /// For expect-100, the only options for a server response are:
@@ -37,6 +40,7 @@ impl CloseReason {
         match self {
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
+            CloseReason::Http10DefaultClose => "HTTP/1.0 response without Connection: keep-alive",
             CloseReason::Not100Continue => "non-100 response before body",
             CloseReason::ProtocolSwitch => "protocol switched via 101",
             CloseReason::CloseDelimitedBody => "response body is close delimited",

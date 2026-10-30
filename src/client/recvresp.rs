@@ -75,6 +75,15 @@ impl Call<RecvResponse> {
             self.inner
                 .close_reason
                 .push(CloseReason::ServerConnectionClose);
+        } else if response.version() == Version::HTTP_10
+            && !response
+                .headers()
+                .iter()
+                .has(header::CONNECTION, "keep-alive")
+        {
+            self.inner
+                .close_reason
+                .push(CloseReason::Http10DefaultClose);
         }
 
         Ok((input_used, Some(response)))

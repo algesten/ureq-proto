@@ -78,6 +78,47 @@ fn close_due_to_http10() {
 }
 
 #[test]
+fn http10_response_persistence() {
+    for (connection, must_close) in [
+        (None, true),
+        (Some("Keep-Alive"), false),
+        (Some("other, KEEP-ALIVE"), false),
+        (Some("keep-alive, close"), true),
+    ] {
+        let mut response = Response::builder()
+            .version(Version::HTTP_10)
+            .header("content-length", "2");
+        if let Some(value) = connection {
+            response = response.header("connection", value);
+        }
+        let scenario = Scenario::builder()
+            .get("https://a.test")
+            .response(response.body(()).unwrap())
+            .recv_body("ok", false)
+            .build();
+        assert_eq!(
+            scenario.to_cleanup().must_close_connection(),
+            must_close,
+            "{connection:?}"
+        );
+    }
+}
+
+#[test]
+fn http10_response_without_body_must_close() {
+    let scenario = Scenario::builder()
+        .head("https://a.test")
+        .response(
+            Response::builder()
+                .version(Version::HTTP_10)
+                .body(())
+                .unwrap(),
+        )
+        .build();
+    assert!(scenario.to_cleanup().must_close_connection());
+}
+
+#[test]
 fn close_due_to_client_connection_close() {
     let scenario = Scenario::builder()
         .get("https://a.test")
