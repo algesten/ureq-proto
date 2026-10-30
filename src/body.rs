@@ -296,6 +296,7 @@ impl BodyReader {
         // Is body mode being defined in headers?
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
 
+        // Are we allowed to receive a body?
         let body_allowed = response_body_allowed(method, status_code);
 
         if body_mode_defined && (body_allowed || force_recv) {
@@ -461,15 +462,21 @@ impl BodyReader {
 pub fn response_body_allowed(method: &Method, status_code: u16) -> bool {
     let is_success = (200..=299).contains(&status_code);
     let is_informational = (100..=199).contains(&status_code);
-    // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
-    // HEAD responses never include a body, regardless of framing headers.
-    let is_head = method == Method::HEAD;
-    // Successful CONNECT responses establish a tunnel instead of a body.
-    let is_tunnel = is_success && method == Method::CONNECT;
-    // 1xx, 204, and 304 responses never include a body or trailers.
-    let bodyless_status = is_informational || matches!(status_code, 204 | 304);
 
-    !is_head && !is_tunnel && !bodyless_status
+    // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
+    // All responses to the HEAD request method
+    // MUST NOT include a message-body, even though the presence of entity-
+    // header fields might lead one to believe they do.
+    let body_not_allowed = method == Method::HEAD ||
+            // A client MUST ignore any Content-Length or Transfer-Encoding
+            // header fields received in a successful response to CONNECT.
+            is_success && method == Method::CONNECT ||
+            // All 1xx (informational), 204 (no content), and 304 (not modified) responses
+            // MUST NOT include a message-body.
+            is_informational ||
+            matches!(status_code, 204 | 304);
+
+    !body_not_allowed
 }
 
 impl fmt::Debug for BodyReader {
