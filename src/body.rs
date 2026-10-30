@@ -49,6 +49,15 @@ impl BodyWriter {
         }
     }
 
+    #[cfg(feature = "server")]
+    pub fn body_mode(&self) -> BodyMode {
+        match self.mode {
+            SenderMode::None => BodyMode::NoBody,
+            SenderMode::Sized(n) => BodyMode::LengthDelimited(n),
+            SenderMode::Chunked => BodyMode::Chunked,
+        }
+    }
+
     pub fn has_body(&self) -> bool {
         match self.mode {
             SenderMode::Sized(n) => n > 0,
@@ -297,13 +306,19 @@ impl BodyReader {
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
 
         // Are we allowed to receive a body?
-        let body_allowed = response_body_allowed(method, status_code);
+        let body_mode = header_defined.body_mode();
+        let body_allowed = response_body_allowed(method, status_code, body_mode);
+
+        // An unframed redirect received by a client is close-delimited.
+        // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
+        let is_redirect = (300..=399).contains(&status_code) && status_code != 304;
+        let unframed_redirect = !body_mode_defined && is_redirect && method != Method::HEAD;
 
         if body_mode_defined && (body_allowed || force_recv) {
             // Response contains a body header (even Content-Length: 0)
             // and expects a body or is forcing a body.
             Ok(header_defined)
-        } else if !body_mode_defined && body_allowed {
+        } else if !body_mode_defined && (body_allowed || unframed_redirect) {
             // Response has no body header but a body might follow.
             // Assume close-delimited body.
             Ok(header_defined)
@@ -459,9 +474,14 @@ impl BodyReader {
 /// A request is allowed to have a body based solely upon it's method. A response,
 /// however, requires a number of factors to be examined. This function checks these
 /// factors.
-pub fn response_body_allowed(method: &Method, status_code: u16) -> bool {
+pub fn response_body_allowed(method: &Method, status_code: u16, body_mode: BodyMode) -> bool {
     let is_success = (200..=299).contains(&status_code);
     let is_informational = (100..=199).contains(&status_code);
+    let is_redirect = (300..=399).contains(&status_code) && status_code != 304;
+
+    // Implicitly we know that CloseDelimited means no header indicated that
+    // there was a body.
+    let has_body_header = body_mode != BodyMode::CloseDelimited;
 
     // https://datatracker.ietf.org/doc/html/rfc2616#section-4.3
     // All responses to the HEAD request method
@@ -474,7 +494,10 @@ pub fn response_body_allowed(method: &Method, status_code: u16) -> bool {
             // All 1xx (informational), 204 (no content), and 304 (not modified) responses
             // MUST NOT include a message-body.
             is_informational ||
-            matches!(status_code, 204 | 304);
+            matches!(status_code, 204 | 304) ||
+            // Surprisingly, redirects may have a body. Whether they do we need to
+            // check the existence of content-length or transfer-encoding headers.
+            is_redirect && !has_body_header;
 
     !body_not_allowed
 }
