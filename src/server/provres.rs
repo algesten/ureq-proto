@@ -40,7 +40,7 @@ impl Reply<ProvideResponse> {
         let status = status.into();
         let method = inner.method.as_ref().unwrap();
 
-        let body_allowed = response_body_allowed(method, status, info.body_mode.body_mode());
+        let body_allowed = response_body_allowed(method, status);
         let force_send = inner.force_send_body;
 
         let should_send_body = body_allowed || force_send;
