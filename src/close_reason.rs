@@ -47,10 +47,10 @@ impl CloseReason {
         match self {
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
-            CloseReason::Http10DefaultClose => "HTTP/1.0 response without Connection: keep-alive",
+            CloseReason::Http10DefaultClose => "server sent HTTP/1.0 without keep-alive",
             CloseReason::Not100Continue => "non-100 response before body",
             CloseReason::ProtocolSwitch => "protocol switched via 101",
-            CloseReason::ConnectTunnel => "connection became a CONNECT tunnel",
+            CloseReason::ConnectTunnel => "protocol switched via CONNECT",
             CloseReason::CloseDelimitedBody => "response body is close delimited",
         }
     }
