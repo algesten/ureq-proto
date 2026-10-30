@@ -49,15 +49,6 @@ impl BodyWriter {
         }
     }
 
-    #[cfg(feature = "server")]
-    pub fn body_mode(&self) -> BodyMode {
-        match self.mode {
-            SenderMode::None => BodyMode::NoBody,
-            SenderMode::Sized(n) => BodyMode::LengthDelimited(n),
-            SenderMode::Chunked => BodyMode::Chunked,
-        }
-    }
-
     pub fn has_body(&self) -> bool {
         match self.mode {
             SenderMode::Sized(n) => n > 0,
@@ -306,8 +297,7 @@ impl BodyReader {
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
 
         // Are we allowed to receive a body?
-        let body_mode = header_defined.body_mode();
-        let body_allowed = response_body_allowed(method, status_code, body_mode);
+        let body_allowed = response_body_allowed(method, status_code);
 
         if body_mode_defined && (body_allowed || force_recv) {
             // Response contains a body header (even Content-Length: 0)
@@ -469,7 +459,7 @@ impl BodyReader {
 /// A request is allowed to have a body based solely upon it's method. A response,
 /// however, requires a number of factors to be examined. This function checks these
 /// factors.
-pub fn response_body_allowed(method: &Method, status_code: u16, _body_mode: BodyMode) -> bool {
+pub fn response_body_allowed(method: &Method, status_code: u16) -> bool {
     let is_success = (200..=299).contains(&status_code);
     let is_informational = (100..=199).contains(&status_code);
 
