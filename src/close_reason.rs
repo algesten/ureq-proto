@@ -3,6 +3,7 @@
 /// This enum represents the various reasons why an HTTP connection might need
 /// to be closed after a request/response cycle is complete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CloseReason {
     /// Client sent `connection: close`.
     ClientConnectionClose,
