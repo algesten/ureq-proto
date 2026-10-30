@@ -49,15 +49,6 @@ impl BodyWriter {
         }
     }
 
-    #[cfg(feature = "server")]
-    pub fn body_mode(&self) -> BodyMode {
-        match self.mode {
-            SenderMode::None => BodyMode::NoBody,
-            SenderMode::Sized(n) => BodyMode::LengthDelimited(n),
-            SenderMode::Chunked => BodyMode::Chunked,
-        }
-    }
-
     pub fn has_body(&self) -> bool {
         match self.mode {
             SenderMode::Sized(n) => n > 0,
@@ -305,11 +296,7 @@ impl BodyReader {
         // Is body mode being defined in headers?
         let body_mode_defined = header_defined.body_mode() != BodyMode::CloseDelimited;
 
-        // Are we allowed to receive a body?
-        // A redirect without framing is close-delimited, not necessarily bodyless:
-        // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
-        let body_allowed = response_body_allowed(method, status_code, header_defined.body_mode())
-            || ((300..=399).contains(&status_code) && status_code != 304 && method != Method::HEAD);
+        let body_allowed = response_body_allowed(method, status_code);
 
         if body_mode_defined && (body_allowed || force_recv) {
             // Response contains a body header (even Content-Length: 0)
@@ -471,16 +458,10 @@ impl BodyReader {
 /// A request is allowed to have a body based solely upon it's method. A response,
 /// however, requires a number of factors to be examined. This function checks these
 /// factors.
-pub fn response_body_allowed(method: &Method, status_code: u16, body_mode: BodyMode) -> bool {
+pub fn response_body_allowed(method: &Method, status_code: u16) -> bool {
     let is_success = (200..=299).contains(&status_code);
     let is_informational = (100..=199).contains(&status_code);
-    let is_redirect = (300..=399).contains(&status_code) && status_code != 304;
-
-    // Implicitly we know that CloseDelimited means no header indicated that
-    // there was a body.
-    let has_body_header = body_mode != BodyMode::CloseDelimited;
-
-    // https://datatracker.ietf.org/doc/html/rfc2616#section-4.3
+    // https://www.rfc-editor.org/rfc/rfc9112#section-6.3
     // All responses to the HEAD request method
     // MUST NOT include a message-body, even though the presence of entity-
     // header fields might lead one to believe they do.
@@ -491,10 +472,7 @@ pub fn response_body_allowed(method: &Method, status_code: u16, body_mode: BodyM
             // All 1xx (informational), 204 (no content), and 304 (not modified) responses
             // MUST NOT include a message-body.
             is_informational ||
-            matches!(status_code, 204 | 304) ||
-            // Surprisingly, redirects may have a body. Whether they do we need to
-            // check the existence of content-length or transfer-encoding headers.
-            is_redirect && !has_body_header;
+            matches!(status_code, 204 | 304);
 
     !body_not_allowed
 }

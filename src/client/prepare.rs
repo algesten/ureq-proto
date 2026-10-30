@@ -82,9 +82,6 @@ impl Call<Prepare> {
     }
 
     /// Add more headers to the call.
-    ///
-    /// A `Connection: close` option marks the connection for closure after the
-    /// response, as required by [RFC 9112 §9.6](https://www.rfc-editor.org/rfc/rfc9112#section-9.6).
     pub fn header<K, V>(&mut self, key: K, value: V) -> Result<(), Error>
     where
         HeaderName: TryFrom<K>,
@@ -93,6 +90,7 @@ impl Call<Prepare> {
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
         self.inner.request.set_header(key, value)?;
+        // https://www.rfc-editor.org/rfc/rfc9112#section-9.6
         if self
             .inner
             .request

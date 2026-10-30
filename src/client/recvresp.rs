@@ -136,7 +136,10 @@ impl Call<RecvResponse> {
                 r.headers_mut()
                     .insert(header::CONNECTION, HeaderValue::from_static("close"));
 
-                (input.len(), r)
+                // Without a complete header boundary we cannot read a body.
+                // This opt-in workaround follows immediately and closes the socket.
+                self.inner.state.reader = Some(BodyReader::NoBody);
+                return Ok(Some((input.len(), r)));
             }
         };
 
