@@ -580,7 +580,7 @@ mod tests {
     }
 
     #[test]
-    fn head_response_with_body_fails() {
+    fn head_response_with_representation_length() {
         let mut reply = Reply::new().unwrap();
 
         // Receive HEAD request
@@ -607,9 +607,7 @@ mod tests {
             .body(())
             .unwrap();
 
-        reply
-            .provide(response)
-            .expect_err("no body allowed on HEAD response");
+        reply.provide(response).unwrap();
     }
 
     #[test]
