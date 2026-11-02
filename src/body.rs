@@ -5,7 +5,8 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, header};
 
 use crate::Error;
 use crate::chunk::Dechunker;
-use crate::util::{Writer, compare_lowercase_ascii, log_data};
+use crate::ext::HeaderIterExt;
+use crate::util::{Writer, log_data};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct BodyWriter {
@@ -315,18 +316,7 @@ impl BodyReader {
     fn header_defined(http10: bool, headers: &HeaderMap) -> Result<Option<Self>, Error> {
         let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
 
-        let mut chunked = false;
-
-        if let Some(value) = headers
-            .get(header::TRANSFER_ENCODING)
-            .and_then(|v| v.to_str().ok())
-        {
-            // Header can repeat, stop looking if we found "chunked"
-            chunked = value
-                .split(',')
-                .map(|v| v.trim())
-                .any(|v| compare_lowercase_ascii(v, "chunked"));
-        }
+        let chunked = headers.iter().has(header::TRANSFER_ENCODING, "chunked");
 
         if chunked && !http10 {
             // https://datatracker.ietf.org/doc/html/rfc2616#section-4.4
@@ -632,5 +622,41 @@ mod test {
         assert_eq!(calculate_max_input(10257), 10241);
         assert_eq!(calculate_max_input(10258), 10242);
         assert_eq!(calculate_max_input(10259), 10243);
+    }
+}
+
+#[cfg(test)]
+mod transfer_encoding_tests {
+    use super::*;
+
+    #[test]
+    fn readers_detect_chunked_in_lists_and_repeated_headers() {
+        for values in [
+            vec!["gzip, chunked"],
+            vec!["chunked, gzip"],
+            vec!["gzip", " ChUnKeD "],
+        ] {
+            let mut headers = HeaderMap::new();
+            for value in values {
+                headers.append(
+                    header::TRANSFER_ENCODING,
+                    HeaderValue::from_str(value).unwrap(),
+                );
+            }
+            #[cfg(feature = "server")]
+            assert_eq!(
+                BodyReader::for_request(false, &Method::POST, false, &headers)
+                    .unwrap()
+                    .body_mode(),
+                BodyMode::Chunked
+            );
+            #[cfg(feature = "client")]
+            assert_eq!(
+                BodyReader::for_response(false, &Method::GET, 200, false, &headers)
+                    .unwrap()
+                    .body_mode(),
+                BodyMode::Chunked
+            );
+        }
     }
 }

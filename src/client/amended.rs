@@ -6,8 +6,8 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Uri, Version, he
 use crate::Error;
 use crate::body::{BodyWriter, parse_content_length_value};
 use crate::client::rawheaders::HeaderCasing;
+use crate::ext::HeaderIterExt;
 use crate::ext::MethodExt;
-use crate::util::compare_lowercase_ascii;
 
 /// `Request` with amends.
 ///
@@ -226,10 +226,7 @@ impl AmendedRequest {
             .map(|h| parse_content_length_value(h.as_bytes()))
             .transpose()?;
 
-        let has_chunked = self
-            .headers_get_all(header::TRANSFER_ENCODING)
-            .filter_map(|v| v.to_str().ok())
-            .any(|v| compare_lowercase_ascii(v, "chunked"));
+        let has_chunked = self.headers().has(header::TRANSFER_ENCODING, "chunked");
 
         let req_body_header = has_chunked || content_length.is_some();
 
@@ -425,5 +422,34 @@ mod test {
         let base: Uri = "https://example.com/x".parse().unwrap();
         let uri = join(base, "//other.example.com:8443/y?q=1").unwrap();
         assert_eq!(uri, "https://other.example.com:8443/y?q=1");
+    }
+}
+
+#[cfg(test)]
+mod transfer_encoding_tests {
+    use super::*;
+
+    #[test]
+    fn request_writer_detects_chunked_in_lists_and_repeated_headers() {
+        for values in [
+            vec!["gzip, chunked"],
+            vec!["chunked, gzip"],
+            vec!["gzip", "ChUnKeD"],
+        ] {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("http://example.test/");
+            for value in values {
+                request = request.header(header::TRANSFER_ENCODING, value);
+            }
+            let request = AmendedRequest::new(request.body(()).unwrap());
+            assert!(
+                request
+                    .analyze(BodyWriter::new_none(), false)
+                    .unwrap()
+                    .body_mode
+                    .is_chunked()
+            );
+        }
     }
 }
