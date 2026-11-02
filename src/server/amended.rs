@@ -4,7 +4,7 @@ use http::{HeaderName, HeaderValue, Response, StatusCode, Version, header};
 
 use crate::Error;
 use crate::body::{BodyWriter, parse_content_length_value};
-use crate::util::compare_lowercase_ascii;
+use crate::ext::HeaderIterExt;
 
 pub(crate) struct AmendedResponse {
     response: Response<()>,
@@ -75,10 +75,7 @@ impl AmendedResponse {
             .map(|h| parse_content_length_value(h.as_bytes()))
             .transpose()?;
 
-        let has_chunked = self
-            .headers_get_all(header::TRANSFER_ENCODING)
-            .filter_map(|v| v.to_str().ok())
-            .any(|v| compare_lowercase_ascii(v, "chunked"));
+        let has_chunked = self.headers().has(header::TRANSFER_ENCODING, "chunked");
 
         // https://www.rfc-editor.org/rfc/rfc9112#section-6.1
         // A sender MUST NOT send a Content-Length header field in any message
@@ -117,5 +114,47 @@ impl fmt::Debug for AmendedResponse {
             .field("status", &self.response.status())
             .field("headers", &self.headers)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod transfer_encoding_tests {
+    use super::*;
+
+    #[test]
+    fn response_writer_detects_chunked_in_lists_and_repeated_headers() {
+        for values in [
+            vec!["gzip, chunked"],
+            vec!["chunked, gzip"],
+            vec!["gzip", "ChUnKeD"],
+        ] {
+            let mut response = Response::builder().status(200);
+            for value in values {
+                response = response.header(header::TRANSFER_ENCODING, value);
+            }
+            let response = AmendedResponse::new(response.body(()).unwrap());
+            assert!(
+                response
+                    .analyze(BodyWriter::new_none())
+                    .unwrap()
+                    .body_mode
+                    .is_chunked()
+            );
+        }
+    }
+
+    #[test]
+    fn response_rejects_content_length_with_listed_chunked() {
+        for value in ["gzip, chunked", "chunked, gzip"] {
+            let response = Response::builder()
+                .header(header::TRANSFER_ENCODING, value)
+                .header(header::CONTENT_LENGTH, "5")
+                .body(())
+                .unwrap();
+            assert!(matches!(
+                AmendedResponse::new(response).analyze(BodyWriter::new_none()),
+                Err(Error::ConflictingBodyHeaders)
+            ));
+        }
     }
 }
