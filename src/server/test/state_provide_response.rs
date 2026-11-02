@@ -304,3 +304,27 @@ fn forbidden_status_body_headers_still_rejected() {
         }
     }
 }
+
+#[test]
+fn zero_length_response_skips_send_body() {
+    for (method, status) in [("GET", 200), ("GET", 404), ("DELETE", 200)] {
+        let scenario = Scenario::builder()
+            .method(method.parse().unwrap(), "/")
+            .build();
+        let response = Response::builder()
+            .status(status)
+            .header("content-length", "0")
+            .body(())
+            .unwrap();
+        let mut reply = scenario.to_provide_response().provide(response).unwrap();
+        let mut output = [0; 1024];
+        let n = reply.write(&mut output).unwrap();
+        let head = std::str::from_utf8(&output[..n]).unwrap();
+        assert!(head.contains("content-length: 0\r\n"));
+        assert!(reply.is_finished());
+        let crate::server::SendResponseResult::Cleanup(reply) = reply.proceed() else {
+            panic!("{method} {status} should go straight to Cleanup")
+        };
+        assert!(!reply.must_close_connection());
+    }
+}

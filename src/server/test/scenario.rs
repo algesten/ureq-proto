@@ -171,11 +171,18 @@ impl Scenario {
 
     pub fn to_cleanup(&self) -> Reply<Cleanup> {
         // For tests that need a Reply in the Cleanup state, we'll create one directly
-        let mut reply = self.to_send_body();
+        let mut reply = self.to_send_response();
+
+        // Write the response headers and proceed to SendBody or Cleanup
+        let mut output = vec![0; 1024];
+        reply.write(&mut output).unwrap();
+
+        let mut reply = match reply.proceed() {
+            SendResponseResult::SendBody(reply) => reply,
+            SendResponseResult::Cleanup(reply) => return reply,
+        };
 
         // Write the response body and proceed to Cleanup
-        let mut output = vec![0; 1024];
-
         if !self.response_body.is_empty() {
             reply.write(&self.response_body, &mut output).unwrap();
         }
