@@ -277,6 +277,15 @@ impl BodyReader {
         if defined.is_none() && headers.contains_key(header::TRANSFER_ENCODING) {
             return Err(Error::BadHeader("invalid request transfer-encoding".into()));
         }
+
+        // RFC 9112 section 6.3: a request with both Transfer-Encoding and
+        // Content-Length may be an attempt at request smuggling. Reject it
+        // instead of picking one framing.
+        if headers.contains_key(header::TRANSFER_ENCODING)
+            && headers.contains_key(header::CONTENT_LENGTH)
+        {
+            return Err(Error::ConflictingBodyHeaders);
+        }
         let ret = defined.unwrap_or(Self::NoBody);
 
         Ok(ret)
