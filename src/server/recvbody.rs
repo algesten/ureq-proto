@@ -26,6 +26,42 @@ impl Reply<RecvBody> {
         rbm.read(input, output, self.inner.state.stop_on_chunk_boundary)
     }
 
+    /// Helper to avoid copying memory.
+    ///
+    /// For length-delimited bodies, `read()` just copies `input` to `output`.
+    /// This copy can be avoided if the caller consumes the transport's input
+    /// buffer directly, or reads from the transport into its own buffer.
+    ///
+    /// Report the number of body bytes consumed this way, equivalent to the
+    /// first `usize` returned by `read()`. Limit transport reads to [`Self::remaining`]
+    /// so bytes belonging to the next request are not consumed.
+    ///
+    /// Returns [`Error::BodyIsChunked`] for chunked bodies, or
+    /// [`Error::BodyLargerThanContentLength`] if `amount` exceeds the remaining
+    /// length. On error, the remaining length is unchanged.
+    pub fn consume_direct_read(&mut self, amount: usize) -> Result<(), Error> {
+        let reader = self.inner.state.reader.as_mut().unwrap();
+        let crate::body::BodyReader::LengthDelimited(left) = reader else {
+            return Err(Error::BodyIsChunked);
+        };
+        if amount as u64 > *left {
+            return Err(Error::BodyLargerThanContentLength);
+        }
+        *left -= amount as u64;
+        Ok(())
+    }
+
+    /// Remaining bytes in a length-delimited request body.
+    ///
+    /// Returns `None` for chunked bodies and `Some(0)` after a length-delimited
+    /// body has been fully consumed, including through [`Self::read`].
+    pub fn remaining(&self) -> Option<u64> {
+        match self.inner.state.reader.as_ref().unwrap() {
+            crate::body::BodyReader::LengthDelimited(left) => Some(*left),
+            _ => None,
+        }
+    }
+
     /// Set whether we are stopping on chunk boundaries.
     ///
     /// If `false`, we are trying to fill the entire `output` in each `read()` call.

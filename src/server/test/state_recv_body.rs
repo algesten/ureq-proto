@@ -174,3 +174,63 @@ fn read_after_end() {
     assert_eq!(input_used, 0);
     assert_eq!(output_used, 0);
 }
+
+#[test]
+fn consume_direct_read() {
+    let scenario = Scenario::builder()
+        .post("/")
+        .request_body(b"hello", false)
+        .build();
+    let mut reply = scenario.to_recv_body();
+    assert_eq!(reply.remaining(), Some(5));
+    reply.consume_direct_read(0).unwrap();
+    assert_eq!(
+        reply.consume_direct_read(6),
+        Err(crate::Error::BodyLargerThanContentLength)
+    );
+    assert_eq!(reply.remaining(), Some(5));
+    reply.consume_direct_read(2).unwrap();
+    assert_eq!(reply.remaining(), Some(3));
+    assert!(!reply.is_ended());
+    assert_eq!(reply.read(b"lloNEXT", &mut [0; 8]).unwrap(), (3, 3));
+    assert_eq!(reply.remaining(), Some(0));
+    reply.consume_direct_read(0).unwrap();
+    assert_eq!(
+        reply.consume_direct_read(1),
+        Err(crate::Error::BodyLargerThanContentLength)
+    );
+    assert!(reply.is_ended());
+    reply.proceed().unwrap();
+}
+
+#[test]
+fn direct_read_after_buffered_read() {
+    let scenario = Scenario::builder()
+        .post("/")
+        .request_body(b"hello", false)
+        .build();
+    let mut reply = scenario.to_recv_body();
+    reply.read(b"he", &mut [0; 2]).unwrap();
+    reply.consume_direct_read(3).unwrap();
+    assert!(reply.is_ended());
+    reply.proceed().unwrap();
+}
+
+#[test]
+fn direct_read_rejects_chunked() {
+    let scenario = Scenario::builder()
+        .post("/")
+        .request_body(b"hello", true)
+        .build();
+    let mut reply = scenario.to_recv_body();
+    assert_eq!(reply.remaining(), None);
+    assert_eq!(
+        reply.consume_direct_read(0),
+        Err(crate::Error::BodyIsChunked)
+    );
+    assert_eq!(
+        reply.consume_direct_read(5),
+        Err(crate::Error::BodyIsChunked)
+    );
+    assert!(!reply.is_ended());
+}
