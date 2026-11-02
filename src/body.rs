@@ -272,13 +272,8 @@ impl BodyReader {
             return Ok(Self::NoBody);
         }
 
-        let ret = Self::header_defined(http10, headers)?.unwrap_or_else(|| {
-            if !http10 && method.need_request_body() {
-                Self::Chunked(Dechunker::new())
-            } else {
-                Self::NoBody
-            }
-        });
+        // RFC 9112 section 6.3: unframed requests have a zero-length body.
+        let ret = Self::header_defined(http10, headers)?.unwrap_or(Self::NoBody);
 
         Ok(ret)
     }

@@ -8,6 +8,7 @@ fn accept_100_continue() {
     let scenario = Scenario::builder()
         .post("/path")
         .header("expect", "100-continue")
+        .header("transfer-encoding", "chunked")
         .build();
 
     // Get a Reply in the Send100 state
@@ -31,6 +32,7 @@ fn reject_100_continue() {
     let scenario = Scenario::builder()
         .post("/path")
         .header("expect", "100-continue")
+        .header("transfer-encoding", "chunked")
         .build();
 
     // Get a Reply in the Send100 state
@@ -49,6 +51,7 @@ fn short_buffer() {
     let scenario = Scenario::builder()
         .post("/path")
         .header("expect", "100-continue")
+        .header("transfer-encoding", "chunked")
         .build();
 
     // Get a Reply in the Send100 state

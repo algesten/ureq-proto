@@ -48,7 +48,7 @@ fn proceed_to_send_100() {
     let mut reply = Reply::new().unwrap();
 
     // Request with Expect: 100-continue
-    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\nexpect: 100-continue\r\n\r\n";
+    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 5\r\nexpect: 100-continue\r\n\r\n";
     let (_, request) = reply.try_request(input).unwrap();
     assert!(request.is_some());
 
@@ -65,7 +65,7 @@ fn proceed_to_recv_body() {
     let mut reply = Reply::new().unwrap();
 
     // POST request without Expect: 100-continue
-    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\n\r\n";
+    let input = b"POST /path HTTP/1.1\r\nhost: example.com\r\ncontent-length: 5\r\n\r\n";
     let (_, request) = reply.try_request(input).unwrap();
     assert!(request.is_some());
 
@@ -244,4 +244,34 @@ fn empty_content_length_is_rejected() {
     let err = reply.try_request(input).unwrap_err();
 
     assert_eq!(err, Error::BadContentLengthHeader);
+}
+
+#[test]
+fn unframed_requests_have_no_body() {
+    for method in ["POST", "PUT", "PATCH"] {
+        for version in ["HTTP/1.0", "HTTP/1.1"] {
+            let mut reply = Reply::new().unwrap();
+            let head = format!("{method} / {version}\r\nhost: example.com\r\n\r\n");
+            let input = format!("{head}GET /next HTTP/1.1\r\nhost: example.com\r\n\r\n");
+            let (used, request) = reply.try_request(input.as_bytes()).unwrap();
+            assert_eq!(used, head.len());
+            assert!(request.is_some());
+            assert!(matches!(
+                reply.proceed(),
+                Some(RecvRequestResult::ProvideResponse(_))
+            ));
+        }
+    }
+}
+
+#[test]
+fn unframed_request_with_expect_skips_100_continue() {
+    // There is no body to continue, so no 100 Continue is owed.
+    let mut reply = Reply::new().unwrap();
+    let input = b"POST / HTTP/1.1\r\nhost: example.com\r\nexpect: 100-continue\r\n\r\n";
+    reply.try_request(input).unwrap();
+    assert!(matches!(
+        reply.proceed(),
+        Some(RecvRequestResult::ProvideResponse(_))
+    ));
 }

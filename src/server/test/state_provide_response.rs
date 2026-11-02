@@ -64,6 +64,7 @@ fn provide_response_after_reject_100() {
     let scenario = Scenario::builder()
         .post("/path")
         .header("expect", "100-continue")
+        .header("transfer-encoding", "chunked")
         .build();
 
     // Get a Reply in the Send100 state
@@ -97,6 +98,7 @@ fn error_when_providing_success_after_reject_100() {
     let scenario = Scenario::builder()
         .post("/path")
         .header("expect", "100-continue")
+        .header("transfer-encoding", "chunked")
         .build();
 
     // Get a Reply in the Send100 state
