@@ -272,13 +272,12 @@ impl BodyReader {
             return Ok(Self::NoBody);
         }
 
-        let ret = Self::header_defined(http10, headers)?.unwrap_or_else(|| {
-            if !http10 && method.need_request_body() {
-                Self::Chunked(Dechunker::new())
-            } else {
-                Self::NoBody
-            }
-        });
+        // RFC 9112 section 6.3: unframed requests have a zero-length body.
+        let defined = Self::header_defined(http10, headers)?;
+        if defined.is_none() && headers.contains_key(header::TRANSFER_ENCODING) {
+            return Err(Error::BadHeader("invalid request transfer-encoding".into()));
+        }
+        let ret = defined.unwrap_or(Self::NoBody);
 
         Ok(ret)
     }
