@@ -273,7 +273,11 @@ impl BodyReader {
         }
 
         // RFC 9112 section 6.3: unframed requests have a zero-length body.
-        let ret = Self::header_defined(http10, headers)?.unwrap_or(Self::NoBody);
+        let defined = Self::header_defined(http10, headers)?;
+        if defined.is_none() && headers.contains_key(header::TRANSFER_ENCODING) {
+            return Err(Error::BadHeader("invalid request transfer-encoding".into()));
+        }
+        let ret = defined.unwrap_or(Self::NoBody);
 
         Ok(ret)
     }
