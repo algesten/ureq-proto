@@ -263,6 +263,26 @@ fn representation_headers_without_body() {
 }
 
 #[test]
+fn representation_headers_reject_content_length_and_transfer_encoding_together() {
+    for (method, status) in [("HEAD", 200), ("GET", 304)] {
+        let scenario = Scenario::builder()
+            .method(method.parse().unwrap(), "/")
+            .build();
+        let response = Response::builder()
+            .status(status)
+            .header("content-length", "1048576")
+            .header("transfer-encoding", "chunked")
+            .body(())
+            .unwrap();
+
+        assert!(
+            scenario.to_provide_response().provide(response).is_err(),
+            "{method} {status} must reject conflicting framing headers"
+        );
+    }
+}
+
+#[test]
 fn forbidden_status_body_headers_still_rejected() {
     for method in ["GET", "HEAD"] {
         for status in [100, 101, 204] {
