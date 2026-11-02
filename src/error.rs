@@ -15,6 +15,7 @@ pub enum Error {
     BadHostHeader,
     BadAuthorizationHeader,
     BadContentLengthHeader,
+    ConflictingBodyHeaders,
     OutputOverflow,
     ChunkLenNotAscii,
     ChunkLenNotANumber,
@@ -52,6 +53,9 @@ impl fmt::Display for Error {
             Error::BadHostHeader => write!(f, "host header is not a string"),
             Error::BadAuthorizationHeader => write!(f, "authorization header is not a string"),
             Error::BadContentLengthHeader => write!(f, "content-length header not a number"),
+            Error::ConflictingBodyHeaders => {
+                write!(f, "both transfer-encoding and content-length headers")
+            }
             Error::OutputOverflow => write!(f, "output too small to write output"),
             Error::ChunkLenNotAscii => write!(f, "chunk length is not ascii"),
             Error::ChunkLenNotANumber => write!(f, "chunk length cannot be read as a number"),
