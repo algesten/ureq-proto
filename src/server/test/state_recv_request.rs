@@ -275,3 +275,10 @@ fn unframed_request_with_expect_skips_100_continue() {
         Some(RecvRequestResult::ProvideResponse(_))
     ));
 }
+
+#[test]
+fn request_with_non_chunked_transfer_encoding_is_rejected() {
+    let mut reply = Reply::new().unwrap();
+    let input = b"POST / HTTP/1.1\r\nhost: example.com\r\ntransfer-encoding: gzip\r\n\r\nGET /next HTTP/1.1\r\nhost: example.com\r\n\r\n";
+    assert!(reply.try_request(input).is_err());
+}
