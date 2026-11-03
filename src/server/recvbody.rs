@@ -36,6 +36,36 @@ impl Reply<RecvBody> {
     /// first `usize` returned by `read()`. Limit transport reads to [`Self::remaining`]
     /// so bytes belonging to the next request are not consumed.
     ///
+    /// Bytes already buffered after the request headers may include a subsequent
+    /// request. Handle only the body prefix, and retain the rest for later:
+    ///
+    /// ```
+    /// use ureq_proto::server::{RecvRequestResult, Reply};
+    ///
+    /// let input = b"POST / HTTP/1.1\r\nHost: example.test\r\nContent-Length: 5\r\n\r\nhelloNEXT";
+    /// let mut reply = Reply::new().unwrap();
+    /// let (headers_used, request) = reply.try_request(input).unwrap();
+    /// assert!(request.is_some());
+    /// let mut reply = match reply.proceed().unwrap() {
+    ///     RecvRequestResult::RecvBody(reply) => reply,
+    ///     _ => panic!("expected a request body"),
+    /// };
+    /// let mut buffered = &input[headers_used..];
+    /// if let Some(remaining) = reply.remaining() {
+    ///     let count = buffered.len().min(remaining.min(usize::MAX as u64) as usize);
+    ///     let (body, rest) = buffered.split_at(count);
+    ///     // Process `body` directly; no output buffer or body copy is needed.
+    ///     assert_eq!(body, b"hello");
+    ///     reply.consume_direct_read(body.len()).unwrap();
+    ///     buffered = rest;
+    /// } else {
+    ///     // Chunked bodies must instead go through reply.read(buffered, output).
+    ///     unreachable!();
+    /// }
+    /// assert!(reply.is_ended());
+    /// assert_eq!(buffered, b"NEXT"); // Preserve for the next request.
+    /// ```
+    ///
     /// Returns [`Error::BodyIsChunked`] for chunked bodies, or
     /// [`Error::BodyLargerThanContentLength`] if `amount` exceeds the remaining
     /// length. On error, the remaining length is unchanged.
