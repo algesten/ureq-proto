@@ -271,6 +271,7 @@ impl BodyReader {
         // RFC 9112 section 6.3: unframed requests have a zero-length body.
         let defined = Self::header_defined(http10, headers)?;
         let has_transfer_encoding = headers.contains_key(header::TRANSFER_ENCODING);
+        let has_content_length = headers.contains_key(header::CONTENT_LENGTH);
         if defined.is_none() && has_transfer_encoding {
             return Err(Error::BadHeader("invalid request transfer-encoding".into()));
         }
@@ -278,7 +279,7 @@ impl BodyReader {
         // RFC 9112 section 6.3: a request with both Transfer-Encoding and
         // Content-Length may be an attempt at request smuggling. Reject it
         // instead of picking one framing.
-        if has_transfer_encoding && headers.contains_key(header::CONTENT_LENGTH) {
+        if has_transfer_encoding && has_content_length {
             return Err(Error::ConflictingBodyHeaders);
         }
         if !method.allow_request_body() && !force_send {
