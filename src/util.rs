@@ -71,6 +71,10 @@ impl<'a> Drop for Writer<'a> {
 }
 
 pub(crate) fn log_data(data: &[u8]) {
+    // Without this, every 16 bytes of input pay for a log level check.
+    if !log_enabled!(log::Level::Trace) {
+        return;
+    }
     for row in data.chunks(CHARS_PER_ROW) {
         trace!("{:?}", Row(row))
     }
