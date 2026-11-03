@@ -298,3 +298,17 @@ fn request_with_transfer_encoding_and_content_length_is_rejected() {
         assert_eq!(err, Error::ConflictingBodyHeaders, "{headers}");
     }
 }
+
+#[test]
+fn head_and_connect_reject_conflicting_body_headers() {
+    for method in ["HEAD", "CONNECT"] {
+        let input = format!(
+            "{method} / HTTP/1.1\r\nhost: example.com\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n\r\n"
+        );
+        let err = Reply::new()
+            .unwrap()
+            .try_request(input.as_bytes())
+            .unwrap_err();
+        assert_eq!(err, Error::ConflictingBodyHeaders, "{method}");
+    }
+}
