@@ -26,6 +26,72 @@ impl Reply<RecvBody> {
         rbm.read(input, output, self.inner.state.stop_on_chunk_boundary)
     }
 
+    /// Helper to avoid copying memory.
+    ///
+    /// For length-delimited bodies, `read()` just copies `input` to `output`.
+    /// This copy can be avoided if the caller consumes the transport's input
+    /// buffer directly, or reads from the transport into its own buffer.
+    ///
+    /// Report the number of body bytes consumed this way, equivalent to the
+    /// first `usize` returned by `read()`. Limit transport reads to [`Self::remaining`]
+    /// so bytes belonging to the next request are not consumed.
+    ///
+    /// Bytes already buffered after the request headers may include a subsequent
+    /// request. Handle only the body prefix, and retain the rest for later:
+    ///
+    /// ```
+    /// use ureq_proto::server::{RecvRequestResult, Reply};
+    ///
+    /// let input = b"POST / HTTP/1.1\r\nHost: example.test\r\nContent-Length: 5\r\n\r\nhelloNEXT";
+    /// let mut reply = Reply::new().unwrap();
+    /// let (headers_used, request) = reply.try_request(input).unwrap();
+    /// assert!(request.is_some());
+    /// let mut reply = match reply.proceed().unwrap() {
+    ///     RecvRequestResult::RecvBody(reply) => reply,
+    ///     _ => panic!("expected a request body"),
+    /// };
+    /// let mut buffered = &input[headers_used..];
+    /// if let Some(remaining) = reply.remaining() {
+    ///     let count = buffered.len().min(remaining.min(usize::MAX as u64) as usize);
+    ///     let (body, rest) = buffered.split_at(count);
+    ///     // Process `body` directly; no output buffer or body copy is needed.
+    ///     assert_eq!(body, b"hello");
+    ///     reply.consume_direct_read(body.len()).unwrap();
+    ///     buffered = rest;
+    /// } else {
+    ///     // Chunked bodies must instead go through reply.read(buffered, output).
+    ///     unreachable!();
+    /// }
+    /// assert!(reply.is_ended());
+    /// assert_eq!(buffered, b"NEXT"); // Preserve for the next request.
+    /// ```
+    ///
+    /// Returns [`Error::BodyIsChunked`] for chunked bodies, or
+    /// [`Error::BodyLargerThanContentLength`] if `amount` exceeds the remaining
+    /// length. On error, the remaining length is unchanged.
+    pub fn consume_direct_read(&mut self, amount: usize) -> Result<(), Error> {
+        let reader = self.inner.state.reader.as_mut().unwrap();
+        let crate::body::BodyReader::LengthDelimited(left) = reader else {
+            return Err(Error::BodyIsChunked);
+        };
+        if amount as u64 > *left {
+            return Err(Error::BodyLargerThanContentLength);
+        }
+        *left -= amount as u64;
+        Ok(())
+    }
+
+    /// Remaining bytes in a length-delimited request body.
+    ///
+    /// Returns `None` for chunked bodies and `Some(0)` after a length-delimited
+    /// body has been fully consumed, including through [`Self::read`].
+    pub fn remaining(&self) -> Option<u64> {
+        match self.inner.state.reader.as_ref().unwrap() {
+            crate::body::BodyReader::LengthDelimited(left) => Some(*left),
+            _ => None,
+        }
+    }
+
     /// Set whether we are stopping on chunk boundaries.
     ///
     /// If `false`, we are trying to fill the entire `output` in each `read()` call.
