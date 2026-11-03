@@ -268,23 +268,21 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        if !method.allow_request_body() && !force_send {
-            return Ok(Self::NoBody);
-        }
-
         // RFC 9112 section 6.3: unframed requests have a zero-length body.
         let defined = Self::header_defined(http10, headers)?;
-        if defined.is_none() && headers.contains_key(header::TRANSFER_ENCODING) {
+        let has_transfer_encoding = headers.contains_key(header::TRANSFER_ENCODING);
+        if defined.is_none() && has_transfer_encoding {
             return Err(Error::BadHeader("invalid request transfer-encoding".into()));
         }
 
         // RFC 9112 section 6.3: a request with both Transfer-Encoding and
         // Content-Length may be an attempt at request smuggling. Reject it
         // instead of picking one framing.
-        if headers.contains_key(header::TRANSFER_ENCODING)
-            && headers.contains_key(header::CONTENT_LENGTH)
-        {
+        if has_transfer_encoding && headers.contains_key(header::CONTENT_LENGTH) {
             return Err(Error::ConflictingBodyHeaders);
+        }
+        if !method.allow_request_body() && !force_send {
+            return Ok(Self::NoBody);
         }
         let ret = defined.unwrap_or(Self::NoBody);
 
