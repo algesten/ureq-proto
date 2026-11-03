@@ -282,3 +282,33 @@ fn request_with_non_chunked_transfer_encoding_is_rejected() {
     let input = b"POST / HTTP/1.1\r\nhost: example.com\r\ntransfer-encoding: gzip\r\n\r\nGET /next HTTP/1.1\r\nhost: example.com\r\n\r\n";
     assert!(reply.try_request(input).is_err());
 }
+
+#[test]
+fn request_with_transfer_encoding_and_content_length_is_rejected() {
+    for headers in [
+        "transfer-encoding: chunked\r\ncontent-length: 5\r\n",
+        "content-length: 5\r\ntransfer-encoding: chunked\r\n",
+        "transfer-encoding: chunked\r\ncontent-length: 0\r\n",
+    ] {
+        let input = format!("POST / HTTP/1.1\r\nhost: example.com\r\n{headers}\r\n");
+        let err = Reply::new()
+            .unwrap()
+            .try_request(input.as_bytes())
+            .unwrap_err();
+        assert_eq!(err, Error::ConflictingBodyHeaders, "{headers}");
+    }
+}
+
+#[test]
+fn head_and_connect_reject_conflicting_body_headers() {
+    for method in ["HEAD", "CONNECT"] {
+        let input = format!(
+            "{method} / HTTP/1.1\r\nhost: example.com\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n\r\n"
+        );
+        let err = Reply::new()
+            .unwrap()
+            .try_request(input.as_bytes())
+            .unwrap_err();
+        assert_eq!(err, Error::ConflictingBodyHeaders, "{method}");
+    }
+}
