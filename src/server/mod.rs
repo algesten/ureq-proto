@@ -14,6 +14,7 @@
 //! * **Send100** - If there is an `Expect: 100-continue` header, the
 //!   server should send a 100 Continue response before receiving the body
 //! * **RecvBody** - Receive the request body
+//!   Use `abandon()` to respond before the body ends, closing the connection.
 //! * **ProvideResponse** - Prepare a response to the request
 //! * **SendResponse** - Send the response status and headers
 //! * **SendBody** - Send the response body
@@ -292,6 +293,16 @@ pub mod state {
     reply_state!(Cleanup);
 }
 use self::state::*;
+
+impl Inner {
+    /// Record a reason to close the connection after this exchange.
+    ///
+    /// A full list already forces a close, so further reasons are dropped
+    /// instead of overflowing.
+    fn close(&mut self, reason: CloseReason) {
+        let _ = self.close_reason.try_push(reason);
+    }
+}
 
 impl<S> Reply<S> {
     fn wrap(inner: Inner) -> Reply<S>

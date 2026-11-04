@@ -133,6 +133,25 @@ impl Reply<RecvBody> {
         rbm.is_ended()
     }
 
+    /// Stop receiving the request body and proceed to providing a response.
+    ///
+    /// Use this to answer an upload early, for example with 401 or 413. If the
+    /// body is incomplete, the connection must be closed after the response;
+    /// unread bytes must not be interpreted as another request. Add
+    /// `connection: close` to the response so the client knows (RFC 9110
+    /// section 10.1.1). Read the body to the end and use [`Self::proceed`] to
+    /// allow connection reuse.
+    ///
+    /// Before sending 100 Continue, use [`Reply::reject`] in the Send100 state
+    /// instead. After accepting 100 Continue, this method permits any response
+    /// status, just like a request without Expect: 100-continue.
+    pub fn abandon(mut self) -> Reply<ProvideResponse> {
+        if !self.is_ended() {
+            self.inner.close(crate::CloseReason::UnreadRequestBody);
+        }
+        Reply::wrap(self.inner)
+    }
+
     /// Proceed to sending a response.
     ///
     /// This is only possible when the request body is fully read.

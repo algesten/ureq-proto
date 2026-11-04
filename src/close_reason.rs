@@ -40,11 +40,15 @@ pub enum CloseReason {
     /// when it's done. This is HTTP/1.0 semantics.
     /// See [RFC 9112 §6.3](https://www.rfc-editor.org/rfc/rfc9112#section-6.3).
     CloseDelimitedBody,
+
+    /// Server responded before receiving the entire request body.
+    UnreadRequestBody,
 }
 
 impl CloseReason {
     pub(crate) fn explain(&self) -> &'static str {
         match self {
+            CloseReason::UnreadRequestBody => "request body was not fully received",
             CloseReason::ClientConnectionClose => "client sent Connection: close",
             CloseReason::ServerConnectionClose => "server sent Connection: close",
             CloseReason::Http10DefaultClose => "server sent HTTP/1.0 without keep-alive",

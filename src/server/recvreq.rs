@@ -62,15 +62,11 @@ impl Reply<RecvRequest> {
         let is_conn_close = headers.iter().has(header::CONNECTION, "close");
 
         if is_http10 && !is_keep_alive {
-            self.inner
-                .close_reason
-                .push(CloseReason::CloseDelimitedBody);
+            self.inner.close(CloseReason::CloseDelimitedBody);
         }
 
         if is_conn_close {
-            self.inner
-                .close_reason
-                .push(CloseReason::ClientConnectionClose);
+            self.inner.close(CloseReason::ClientConnectionClose);
         }
 
         Ok((input_used, Some(request)))
