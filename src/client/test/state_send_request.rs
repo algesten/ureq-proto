@@ -1,5 +1,7 @@
 use crate::Error;
+use crate::client::Call;
 use crate::client::SendRequestResult;
+use http::Request;
 
 use super::TestSliceExt;
 use super::scenario::Scenario;
@@ -101,4 +103,19 @@ fn proceed_without_body_and_expect_100() {
         Ok(Some(SendRequestResult::RecvResponse(_))) => {}
         _ => panic!("Method without body and Expect: 100-continue should result in RecvResponse"),
     }
+}
+
+#[test]
+fn conflicting_body_headers_are_rejected() {
+    let req = Request::post("http://example.test/")
+        .header("content-length", "5")
+        .header("transfer-encoding", "chunked")
+        .body(())
+        .unwrap();
+    let mut call = Call::new(req).unwrap().proceed();
+    let mut output = [0; 1024];
+    assert_eq!(
+        call.write(&mut output).unwrap_err(),
+        Error::ConflictingBodyHeaders
+    );
 }

@@ -228,17 +228,18 @@ impl AmendedRequest {
 
         let has_chunked = self.headers().has(header::TRANSFER_ENCODING, "chunked");
 
+        // https://www.rfc-editor.org/rfc/rfc9112#section-6.1
+        // A sender MUST NOT send a Content-Length header field in any message
+        // that contains a Transfer-Encoding header field.
+        if has_chunked && content_length.is_some() {
+            return Err(Error::ConflictingBodyHeaders);
+        }
+
         let req_body_header = has_chunked || content_length.is_some();
 
-        // https://datatracker.ietf.org/doc/html/rfc2616#section-4.4
-        // Messages MUST NOT include both a Content-Length header field and a
-        // non-identity transfer-coding. If the message does include a non-
-        // identity transfer-coding, the Content-Length MUST be ignored.
         let body_mode = if has_chunked {
-            // chunked "wins"
             BodyWriter::new_chunked()
         } else if let Some(n) = content_length {
-            // user provided content-length second
             BodyWriter::new_sized(n)
         } else {
             wanted_mode
