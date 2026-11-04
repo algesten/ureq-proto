@@ -133,6 +133,19 @@ impl Reply<RecvBody> {
         rbm.is_ended()
     }
 
+    /// Proceed to sending a response.
+    ///
+    /// This is only possible when the request body is fully read.
+    ///
+    /// Returns the Reply in the ProvideResponse state.
+    ///
+    /// Panics if the request body has not been fully read.
+    pub fn proceed(self) -> Result<Reply<ProvideResponse>, Error> {
+        assert!(self.is_ended());
+
+        Ok(Reply::wrap(self.inner))
+    }
+
     /// Stop receiving the request body and proceed to providing a response.
     ///
     /// Use this to answer an upload early, for example with 401 or 413. If the
@@ -147,21 +160,9 @@ impl Reply<RecvBody> {
     /// status, just like a request without Expect: 100-continue.
     pub fn abandon(mut self) -> Reply<ProvideResponse> {
         if !self.is_ended() {
-            self.inner.close(crate::CloseReason::UnreadRequestBody);
+            self.inner
+                .record_close_reason(crate::CloseReason::UnreadRequestBody);
         }
         Reply::wrap(self.inner)
-    }
-
-    /// Proceed to sending a response.
-    ///
-    /// This is only possible when the request body is fully read.
-    ///
-    /// Returns the Reply in the ProvideResponse state.
-    ///
-    /// Panics if the request body has not been fully read.
-    pub fn proceed(self) -> Result<Reply<ProvideResponse>, Error> {
-        assert!(self.is_ended());
-
-        Ok(Reply::wrap(self.inner))
     }
 }

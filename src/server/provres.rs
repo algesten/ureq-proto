@@ -31,7 +31,7 @@ impl Reply<ProvideResponse> {
             .headers()
             .any(|(h, v)| h == header::CONNECTION && v == "close");
         if server_close {
-            inner.close(CloseReason::ServerConnectionClose);
+            inner.record_close_reason(CloseReason::ServerConnectionClose);
         }
 
         let response = inner.response.as_mut().unwrap();

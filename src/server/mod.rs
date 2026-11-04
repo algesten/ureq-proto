@@ -294,16 +294,6 @@ pub mod state {
 }
 use self::state::*;
 
-impl Inner {
-    /// Record a reason to close the connection after this exchange.
-    ///
-    /// A full list already forces a close, so further reasons are dropped
-    /// instead of overflowing.
-    fn close(&mut self, reason: CloseReason) {
-        let _ = self.close_reason.try_push(reason);
-    }
-}
-
 impl<S> Reply<S> {
     fn wrap(inner: Inner) -> Reply<S>
     where
