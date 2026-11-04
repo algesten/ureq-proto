@@ -24,14 +24,17 @@ impl Reply<ProvideResponse> {
         let mut inner = append_request(self.inner, response);
 
         // unwrap are correct due to state we should be in when we get here.
-        let response = inner.response.as_mut().unwrap();
-
-        if response
+        let server_close = inner
+            .response
+            .as_ref()
+            .unwrap()
             .headers()
-            .any(|(h, v)| h == header::CONNECTION && v == "close")
-        {
-            inner.close_reason.push(CloseReason::ServerConnectionClose);
+            .any(|(h, v)| h == header::CONNECTION && v == "close");
+        if server_close {
+            inner.record_close_reason(CloseReason::ServerConnectionClose);
         }
+
+        let response = inner.response.as_mut().unwrap();
 
         let writer = inner.state.writer.take().unwrap();
         let info = response.analyze(writer)?;

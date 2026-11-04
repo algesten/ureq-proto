@@ -63,14 +63,12 @@ impl Reply<RecvRequest> {
 
         if is_http10 && !is_keep_alive {
             self.inner
-                .close_reason
-                .push(CloseReason::CloseDelimitedBody);
+                .record_close_reason(CloseReason::CloseDelimitedBody);
         }
 
         if is_conn_close {
             self.inner
-                .close_reason
-                .push(CloseReason::ClientConnectionClose);
+                .record_close_reason(CloseReason::ClientConnectionClose);
         }
 
         Ok((input_used, Some(request)))
@@ -106,7 +104,19 @@ impl Reply<RecvRequest> {
 
         Ok(Some((input_used, request)))
     }
+}
 
+impl Inner {
+    /// Record a reason to close the connection after this exchange.
+    ///
+    /// A full list already forces a close, so further reasons are dropped
+    /// instead of overflowing.
+    pub(super) fn record_close_reason(&mut self, reason: CloseReason) {
+        let _ = self.close_reason.try_push(reason);
+    }
+}
+
+impl Reply<RecvRequest> {
     /// Check if the Reply can proceed to the next state.
     ///
     /// This method is currently not implemented and will panic if called.

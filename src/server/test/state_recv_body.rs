@@ -234,3 +234,85 @@ fn direct_read_rejects_chunked() {
     );
     assert!(!reply.is_ended());
 }
+
+#[test]
+fn abandon_unread_body() {
+    for chunked in [false, true] {
+        for expect in [false, true] {
+            for partial in [false, true] {
+                let mut builder = Scenario::builder()
+                    .post("/")
+                    .request_body(b"hello", chunked);
+                if expect {
+                    builder = builder.header("expect", "100-continue");
+                }
+                let scenario = builder.build();
+                let mut reply = scenario.to_recv_body();
+                if partial {
+                    let input: &[u8] = if chunked { b"5\r\nhe" } else { b"he" };
+                    reply.read(input, &mut [0; 16]).unwrap();
+                }
+                let reply = reply.abandon();
+                // A sent 100 Continue must not impose reject()'s status restriction.
+                let mut reply = reply
+                    .provide(
+                        http::Response::builder()
+                            .status(200)
+                            .header("content-length", "0")
+                            .body(())
+                            .unwrap(),
+                    )
+                    .unwrap();
+                reply.write(&mut [0; 1024]).unwrap();
+                let crate::server::SendResponseResult::Cleanup(reply) = reply.proceed() else {
+                    panic!()
+                };
+                assert!(reply.must_close_connection());
+                assert!(
+                    reply
+                        .inner()
+                        .close_reason
+                        .contains(&crate::CloseReason::UnreadRequestBody)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn abandon_completed_body_allows_reuse() {
+    let scenario = Scenario::builder()
+        .post("/")
+        .request_body(b"hi", false)
+        .build();
+    let mut reply = scenario.to_recv_body();
+    reply.read(b"hi", &mut [0; 2]).unwrap();
+    let reply = reply.abandon();
+    assert!(reply.inner().close_reason.is_empty());
+}
+
+#[test]
+fn abandon_with_every_close_reason() {
+    // HTTP/1.0 without keep-alive, client close, unread body and server close.
+    let scenario = Scenario::builder()
+        .request(
+            http::Request::post("/")
+                .version(http::Version::HTTP_10)
+                .body(())
+                .unwrap(),
+        )
+        .header("connection", "close")
+        .request_body(b"hello", false)
+        .build();
+    let reply = scenario.to_recv_body().abandon();
+    let reply = reply
+        .provide(
+            http::Response::builder()
+                .status(413)
+                .header("connection", "close")
+                .body(())
+                .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(reply.inner().close_reason.len(), 4);
+}

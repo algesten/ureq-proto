@@ -14,6 +14,7 @@
 //! * **Send100** - If there is an `Expect: 100-continue` header, the
 //!   server should send a 100 Continue response before receiving the body
 //! * **RecvBody** - Receive the request body
+//!   Use `abandon()` to respond before the body ends, closing the connection.
 //! * **ProvideResponse** - Prepare a response to the request
 //! * **SendResponse** - Send the response status and headers
 //! * **SendBody** - Send the response body
