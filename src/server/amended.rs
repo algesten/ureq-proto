@@ -9,6 +9,7 @@ use crate::ext::HeaderIterExt;
 pub(crate) struct AmendedResponse {
     response: Response<()>,
     headers: Vec<(HeaderName, HeaderValue)>,
+    omit_transfer_encoding: bool,
 }
 
 impl AmendedResponse {
@@ -16,6 +17,7 @@ impl AmendedResponse {
         AmendedResponse {
             response,
             headers: vec![],
+            omit_transfer_encoding: false,
         }
     }
 
@@ -41,7 +43,22 @@ impl AmendedResponse {
         Ok(())
     }
 
+    /// Leave `Transfer-Encoding` out of the written headers.
+    ///
+    /// Transfer codings are HTTP/1.1 only. The header still counts for
+    /// [`analyze()`][Self::analyze], which decides the body mode.
+    pub fn omit_transfer_encoding(&mut self) {
+        self.omit_transfer_encoding = true;
+    }
+
+    /// The headers as they go on the wire.
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
+        self.all_headers().filter(move |(k, _)| {
+            !(self.omit_transfer_encoding && **k == header::TRANSFER_ENCODING)
+        })
+    }
+
+    fn all_headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
         self.headers
             .iter()
             .map(|v| (&v.0, &v.1))
@@ -49,7 +66,7 @@ impl AmendedResponse {
     }
 
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
-        self.headers()
+        self.all_headers()
             .filter(move |(k, _)| *k == key)
             .map(|(_, v)| v)
     }

@@ -20,6 +20,10 @@ enum SenderMode {
     None,
     Sized(u64),
     Chunked,
+    /// Raw bytes until the connection closes. HTTP/1.0 responses without a
+    /// `Content-Length` are framed this way.
+    #[cfg(feature = "server")]
+    CloseDelimited,
 }
 
 // This is 0x2800 in hex.
@@ -50,16 +54,31 @@ impl BodyWriter {
         }
     }
 
+    #[cfg(feature = "server")]
+    pub fn new_close_delimited() -> Self {
+        BodyWriter {
+            mode: SenderMode::CloseDelimited,
+            ended: false,
+        }
+    }
+
     pub fn has_body(&self) -> bool {
         match self.mode {
             SenderMode::Sized(n) => n > 0,
             SenderMode::Chunked => true,
             SenderMode::None => false,
+            #[cfg(feature = "server")]
+            SenderMode::CloseDelimited => true,
         }
     }
 
     pub fn is_chunked(&self) -> bool {
         matches!(self.mode, SenderMode::Chunked)
+    }
+
+    #[cfg(feature = "server")]
+    pub fn is_close_delimited(&self) -> bool {
+        matches!(self.mode, SenderMode::CloseDelimited)
     }
 
     pub fn write(&mut self, input: &[u8], w: &mut Writer) -> usize {
@@ -100,6 +119,20 @@ impl BodyWriter {
 
                 input_used
             }
+            #[cfg(feature = "server")]
+            SenderMode::CloseDelimited => {
+                if input.is_empty() {
+                    self.ended = true;
+                    return 0;
+                }
+
+                let to_write = w.available().min(input.len());
+
+                let success = w.try_write(|w| w.write_all(&input[..to_write]));
+                assert!(success);
+
+                to_write
+            }
         }
     }
 
@@ -125,6 +158,8 @@ impl BodyWriter {
                 header::TRANSFER_ENCODING,
                 HeaderValue::from_static("chunked"),
             ),
+            #[cfg(feature = "server")]
+            SenderMode::CloseDelimited => unreachable!(),
         }
     }
 
@@ -150,6 +185,9 @@ impl BodyWriter {
                 }
             }
             SenderMode::Chunked => unreachable!(),
+            // There is no length to account for.
+            #[cfg(feature = "server")]
+            SenderMode::CloseDelimited => {}
         }
     }
 }

@@ -28,6 +28,7 @@ impl Reply<RecvRequest> {
             force_recv_body: false,
             force_send_body: false,
             method: None,
+            http10: false,
             expect_100: false,
             expect_100_reject: false,
         };
@@ -60,6 +61,8 @@ impl Reply<RecvRequest> {
         let is_http10 = request.version() == Version::HTTP_10;
         let is_keep_alive = headers.iter().has(header::CONNECTION, "keep-alive");
         let is_conn_close = headers.iter().has(header::CONNECTION, "close");
+
+        self.inner.http10 = is_http10;
 
         if is_http10 && !is_keep_alive {
             self.inner
@@ -109,9 +112,12 @@ impl Reply<RecvRequest> {
 impl Inner {
     /// Record a reason to close the connection after this exchange.
     ///
-    /// A full list already forces a close, so further reasons are dropped
-    /// instead of overflowing.
+    /// Each reason is recorded once. A full list already forces a close, so
+    /// further reasons are dropped instead of overflowing.
     pub(super) fn record_close_reason(&mut self, reason: CloseReason) {
+        if self.close_reason.contains(&reason) {
+            return;
+        }
         let _ = self.close_reason.try_push(reason);
     }
 }
