@@ -20,7 +20,8 @@ impl Reply<SendBody> {
     /// **Important**
     ///
     /// To indicate that the body is fully sent, you call write with an `input` parameter set to `&[]`.
-    /// This ends the `transfer-encoding: chunked` and ensures the state is correct to proceed.
+    /// This ends the `transfer-encoding: chunked` (or a close delimited HTTP/1.0 body) and ensures
+    /// the state is correct to proceed.
     pub fn write(&mut self, input: &[u8], output: &mut [u8]) -> Result<(usize, usize), Error> {
         let mut w = Writer::new(output);
 
@@ -57,12 +58,14 @@ impl Reply<SendBody> {
         // to use consume_direct_write()
         let writer = self.inner.state.writer.as_mut().unwrap();
 
+        if writer.is_chunked() {
+            return Err(Error::BodyIsChunked);
+        }
+
         if let Some(left) = writer.left_to_send() {
             if amount as u64 > left {
                 return Err(Error::BodyLargerThanContentLength);
             }
-        } else {
-            return Err(Error::BodyIsChunked);
         }
 
         writer.consume_direct_write(amount);
@@ -90,8 +93,8 @@ impl Reply<SendBody> {
     /// Check whether the response body is fully sent.
     ///
     /// For responses with a `content-length` header set, this will only become `true` once the
-    /// number of bytes communicated have been sent. For chunked transfer, this becomes `true`
-    /// after calling `write()` with an input of `&[]`.
+    /// number of bytes communicated have been sent. For chunked transfer and close delimited
+    /// HTTP/1.0 bodies, this becomes `true` after calling `write()` with an input of `&[]`.
     pub fn is_finished(&self) -> bool {
         self.inner.state.writer.as_ref().unwrap().is_ended()
     }
