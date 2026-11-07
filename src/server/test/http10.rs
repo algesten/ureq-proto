@@ -230,6 +230,20 @@ fn close_delimited_direct_write() {
 }
 
 #[test]
+fn close_delimited_direct_write_after_finish_is_rejected() {
+    let scenario = Scenario::builder()
+        .request(get10(None))
+        .response(Response::builder().status(200).body(()).unwrap())
+        .build();
+    let mut reply = scenario.to_send_body();
+    reply.write(&[], &mut []).unwrap();
+    assert!(matches!(
+        reply.consume_direct_write(1),
+        Err(crate::Error::BodyContentAfterFinish)
+    ));
+}
+
+#[test]
 fn http11_without_length_is_still_chunked() {
     let request = Request::get("/path").body(()).unwrap();
     let response = Response::builder().status(200).body(()).unwrap();
