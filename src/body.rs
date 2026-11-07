@@ -613,6 +613,9 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
                 }
                 chunked = true;
             } else {
+                if !valid_transfer_parameters(params) {
+                    return Err(Error::BadTransferEncodingHeader);
+                }
                 unsupported = true;
             }
         }
@@ -630,6 +633,62 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
     }
 
     Ok(chunked)
+}
+
+#[cfg(feature = "server")]
+fn valid_transfer_parameters(mut params: &[u8]) -> bool {
+    loop {
+        params = trim_ows(params);
+        if params.is_empty() {
+            return true;
+        }
+        let Some(rest) = params.strip_prefix(b";") else {
+            return false;
+        };
+        params = trim_ows(rest);
+        let len = params.iter().take_while(|b| is_token(**b)).count();
+        if len == 0 {
+            return false;
+        }
+        params = trim_ows(&params[len..]);
+        let Some(rest) = params.strip_prefix(b"=") else {
+            return false;
+        };
+        params = trim_ows(rest);
+        if let Some(rest) = params.strip_prefix(b"\"") {
+            let mut end = None;
+            let mut escaped = false;
+            for (i, &b) in rest.iter().enumerate() {
+                if escaped {
+                    if !(b == b'\t' || b == b' ' || (0x21..=0x7e).contains(&b) || b >= 0x80) {
+                        return false;
+                    }
+                    escaped = false;
+                } else if b == b'\\' {
+                    escaped = true;
+                } else if b == b'"' {
+                    end = Some(i + 1);
+                    break;
+                } else if !(b == b'\t'
+                    || b == b' '
+                    || b == 0x21
+                    || (0x23..=0x5b).contains(&b)
+                    || (0x5d..=0x7e).contains(&b)
+                    || b >= 0x80)
+                {
+                    return false;
+                }
+            }
+            let Some(end) = end else { return false };
+            params = &rest[end..];
+        } else {
+            let len = params.iter().take_while(|b| is_token(**b)).count();
+            if len == 0 {
+                return false;
+            }
+            params = &params[len..];
+        }
+    }
 }
 
 #[cfg(feature = "server")]
