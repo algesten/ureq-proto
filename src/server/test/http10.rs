@@ -244,3 +244,32 @@ fn http11_without_length_is_still_chunked() {
     assert_eq!(ex.body, b"5\r\nhello\r\n0\r\n\r\n");
     assert!(!ex.reply.must_close_connection());
 }
+
+#[test]
+fn keep_alive_response_connection_close_token_closes() {
+    let response = Response::builder()
+        .status(200)
+        .header("connection", "upgrade, Close")
+        .header("content-length", "5")
+        .body(())
+        .unwrap();
+    let ex = exchange(get10(Some("keep-alive")), response, b"hello");
+
+    assert!(ex.reply.must_close_connection());
+    assert!(!ex.head.contains("connection: keep-alive\r\n"));
+}
+
+#[test]
+fn transfer_encoding_with_content_length_is_close_delimited() {
+    let response = Response::builder()
+        .status(200)
+        .header("transfer-encoding", "gzip")
+        .header("content-length", "5")
+        .body(())
+        .unwrap();
+    let ex = exchange(get10(Some("keep-alive")), response, b"hello");
+
+    assert!(!ex.head.contains("transfer-encoding:"));
+    assert!(!ex.head.contains("content-length:"));
+    assert!(ex.reply.must_close_connection());
+}
