@@ -612,12 +612,12 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
                     return Err(Error::BadTransferEncodingHeader);
                 }
                 chunked = true;
-            } else {
-                if !valid_transfer_parameters(params) {
-                    return Err(Error::BadTransferEncodingHeader);
-                }
-                unsupported = true;
+                continue;
             }
+            if !valid_transfer_parameters(params) {
+                return Err(Error::BadTransferEncodingHeader);
+            }
+            unsupported = true;
         }
         if quoted {
             return Err(Error::BadTransferEncodingHeader);
@@ -633,6 +633,28 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
     }
 
     Ok(chunked)
+}
+
+#[cfg(feature = "server")]
+fn is_token(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+        || matches!(
+            b,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
 }
 
 #[cfg(feature = "server")]
@@ -656,61 +678,49 @@ fn valid_transfer_parameters(mut params: &[u8]) -> bool {
         };
         params = trim_ows(rest);
         if let Some(rest) = params.strip_prefix(b"\"") {
-            let mut end = None;
-            let mut escaped = false;
-            for (i, &b) in rest.iter().enumerate() {
-                if escaped {
-                    if !(b == b'\t' || b == b' ' || (0x21..=0x7e).contains(&b) || b >= 0x80) {
-                        return false;
-                    }
-                    escaped = false;
-                } else if b == b'\\' {
-                    escaped = true;
-                } else if b == b'"' {
-                    end = Some(i + 1);
-                    break;
-                } else if !(b == b'\t'
-                    || b == b' '
-                    || b == 0x21
-                    || (0x23..=0x5b).contains(&b)
-                    || (0x5d..=0x7e).contains(&b)
-                    || b >= 0x80)
-                {
-                    return false;
-                }
-            }
-            let Some(end) = end else { return false };
-            params = &rest[end..];
-        } else {
-            let len = params.iter().take_while(|b| is_token(**b)).count();
-            if len == 0 {
+            let Some(rest) = after_quoted_string(rest) else {
                 return false;
-            }
-            params = &params[len..];
+            };
+            params = rest;
+            continue;
         }
+        let len = params.iter().take_while(|b| is_token(**b)).count();
+        if len == 0 {
+            return false;
+        }
+        params = &params[len..];
     }
 }
 
 #[cfg(feature = "server")]
-fn is_token(b: u8) -> bool {
-    b.is_ascii_alphanumeric()
-        || matches!(
-            b,
-            b'!' | b'#'
-                | b'$'
-                | b'%'
-                | b'&'
-                | b'\''
-                | b'*'
-                | b'+'
-                | b'-'
-                | b'.'
-                | b'^'
-                | b'_'
-                | b'`'
-                | b'|'
-                | b'~'
-        )
+fn after_quoted_string(bytes: &[u8]) -> Option<&[u8]> {
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if escaped {
+            if !(b == b'\t' || b == b' ' || (0x21..=0x7e).contains(&b) || b >= 0x80) {
+                return None;
+            }
+            escaped = false;
+            continue;
+        }
+        if b == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if b == b'"' {
+            return Some(&bytes[i + 1..]);
+        }
+        if !(b == b'\t'
+            || b == b' '
+            || b == 0x21
+            || (0x23..=0x5b).contains(&b)
+            || (0x5d..=0x7e).contains(&b)
+            || b >= 0x80)
+        {
+            return None;
+        }
+    }
+    None
 }
 
 #[cfg(test)]
