@@ -578,7 +578,20 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
     let mut unsupported = false;
 
     for value in headers.get_all(header::TRANSFER_ENCODING) {
-        for element in value.as_bytes().split(|b| *b == b',') {
+        let mut quoted = false;
+        let mut escaped = false;
+        for element in value.as_bytes().split(|b| {
+            if escaped {
+                escaped = false;
+            } else if quoted && *b == b'\\' {
+                escaped = true;
+            } else if *b == b'"' {
+                quoted = !quoted;
+            } else if *b == b',' && !quoted {
+                return true;
+            }
+            false
+        }) {
             let element = trim_ows(element);
             if element.is_empty() {
                 continue;
@@ -602,6 +615,9 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
             } else {
                 unsupported = true;
             }
+        }
+        if quoted {
+            return Err(Error::BadTransferEncodingHeader);
         }
     }
 
