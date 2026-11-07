@@ -238,6 +238,7 @@ pub(crate) struct Inner {
     pub force_recv_body: bool,
     pub force_send_body: bool,
     pub method: Option<Method>,
+    pub http10: bool,
     pub expect_100: bool,
     pub expect_100_reject: bool,
 }
@@ -339,7 +340,13 @@ mod send100;
 ///
 /// This function is used when transitioning from a state that has received a request
 /// to a state that will send a response.
-fn append_request(inner: Inner, response: Response<()>) -> Inner {
+fn append_request(inner: Inner, mut response: Response<()>) -> Inner {
+    // An HTTP/1.0 client is answered in HTTP/1.0, whatever version the
+    // response was built with.
+    if inner.http10 {
+        *response.version_mut() = Version::HTTP_10;
+    }
+
     // unwrap is ok because method is set early.
     let method_allows_body = inner.method.as_ref().unwrap().allow_request_body();
     let status_allows_body = response.status().body_allowed();
@@ -361,6 +368,7 @@ fn append_request(inner: Inner, response: Response<()>) -> Inner {
         force_send_body: inner.force_send_body,
         close_reason: inner.close_reason,
         method: inner.method,
+        http10: inner.http10,
         expect_100: inner.expect_100,
         expect_100_reject: inner.expect_100_reject,
     }

@@ -3,6 +3,7 @@ use http::{Method, Response, header};
 use crate::body::BodyWriter;
 
 use crate::body::response_body_allowed;
+use crate::ext::HeaderIterExt;
 use crate::{CloseReason, Error};
 
 use super::state::{ProvideResponse, SendResponse};
@@ -24,12 +25,14 @@ impl Reply<ProvideResponse> {
         let mut inner = append_request(self.inner, response);
 
         // unwrap are correct due to state we should be in when we get here.
-        let server_close = inner
-            .response
-            .as_ref()
-            .unwrap()
-            .headers()
-            .any(|(h, v)| h == header::CONNECTION && v == "close");
+        let response = inner.response.as_ref().unwrap();
+        let server_close = if inner.http10 {
+            response.headers().has(header::CONNECTION, "close")
+        } else {
+            response
+                .headers()
+                .any(|(h, v)| h == header::CONNECTION && v == "close")
+        };
         if server_close {
             inner.record_close_reason(CloseReason::ServerConnectionClose);
         }
@@ -60,17 +63,70 @@ impl Reply<ProvideResponse> {
             return Err(Error::BodyNotAllowed);
         }
 
-        if body_provided && !info.res_body_header && should_send_body {
+        let mut body_mode = info.body_mode;
+
+        if inner.http10 {
+            // Chunked coding is HTTP/1.1 only (RFC 9112 section 7.1). An HTTP/1.0
+            // client reads the body until the connection closes, and a
+            // Transfer-Encoding header means nothing to it.
+            for (_, value) in response
+                .headers()
+                .filter(|(name, _)| **name == header::TRANSFER_ENCODING)
+            {
+                let value = value.to_str().map_err(|_| {
+                    Error::BadHeader("unsupported response transfer-encoding".into())
+                })?;
+                if value
+                    .split(',')
+                    .any(|token| !token.trim().eq_ignore_ascii_case("chunked"))
+                {
+                    return Err(Error::BadHeader(
+                        "unsupported response transfer-encoding".into(),
+                    ));
+                }
+            }
+            response.remove_transfer_encoding();
+            if body_mode.is_chunked() {
+                body_mode = BodyWriter::new_close_delimited();
+            }
+        }
+
+        if body_provided
+            && !info.res_body_header
+            && should_send_body
+            && !body_mode.is_close_delimited()
+        {
             // User did not set a body header, we set one.
-            let header = info.body_mode.body_header();
+            let header = body_mode.body_header();
             response.set_header(header.0, header.1)?;
         }
 
-        inner.state.writer = Some(if metadata_only && !force_send {
+        let writer = if metadata_only && !force_send {
             BodyWriter::new_none()
         } else {
-            info.body_mode
-        });
+            body_mode
+        };
+
+        let response_keep_alive = response.headers().has(header::CONNECTION, "keep-alive");
+
+        if writer.is_close_delimited() {
+            inner.record_close_reason(CloseReason::CloseDelimitedBody);
+        }
+
+        if inner.http10 && !inner.close_reason.is_empty() && response_keep_alive {
+            inner.response.as_mut().unwrap().remove_keep_alive();
+        }
+
+        // An HTTP/1.0 client assumes the server closes unless told otherwise
+        // (RFC 9112 Appendix C.2.2). Any recorded close reason means we do close:
+        // the client did not ask for keep-alive, someone sent Connection: close,
+        // the body is close delimited or the request body was left unread.
+        if inner.http10 && inner.close_reason.is_empty() && !response_keep_alive {
+            let response = inner.response.as_mut().unwrap();
+            response.set_header(header::CONNECTION, "keep-alive")?;
+        }
+
+        inner.state.writer = Some(writer);
 
         Ok(Reply::wrap(inner))
     }

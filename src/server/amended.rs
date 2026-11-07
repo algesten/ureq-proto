@@ -101,6 +101,57 @@ impl AmendedResponse {
             res_body_header,
         })
     }
+
+    /// Remove HTTP/1.1 framing headers after analyzing the original response.
+    pub fn remove_transfer_encoding(&mut self) {
+        self.headers
+            .retain(|(name, _)| *name != header::TRANSFER_ENCODING);
+        self.response
+            .headers_mut()
+            .remove(header::TRANSFER_ENCODING);
+    }
+
+    pub fn remove_keep_alive(&mut self) {
+        self.headers.retain_mut(|(name, value)| {
+            *name != header::CONNECTION || remove_keep_alive_token(value)
+        });
+        if let http::header::Entry::Occupied(entry) =
+            self.response.headers_mut().entry(header::CONNECTION)
+        {
+            let (_, values) = entry.remove_entry_mult();
+            for mut value in values {
+                if remove_keep_alive_token(&mut value) {
+                    self.headers.push((header::CONNECTION, value));
+                }
+            }
+        }
+    }
+}
+
+fn remove_keep_alive_token(value: &mut HeaderValue) -> bool {
+    let Ok(text) = value.to_str() else {
+        return true;
+    };
+    if !text
+        .split(',')
+        .any(|token| token.trim().eq_ignore_ascii_case("keep-alive"))
+    {
+        return true;
+    }
+    let mut tokens = text
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.eq_ignore_ascii_case("keep-alive") && !token.is_empty());
+    let Some(first) = tokens.next() else {
+        return false;
+    };
+    let mut result = first.to_owned();
+    for token in tokens {
+        result.push_str(", ");
+        result.push_str(token);
+    }
+    *value = HeaderValue::from_str(&result).expect("valid header tokens");
+    true
 }
 
 pub(crate) struct ResponseInfo {
