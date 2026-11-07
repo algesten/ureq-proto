@@ -300,6 +300,20 @@ fn close_delimited_response_does_not_advertise_keep_alive() {
 }
 
 #[test]
+fn close_delimited_response_preserves_other_connection_tokens() {
+    let response = Response::builder()
+        .header("connection", "upgrade, Keep-Alive")
+        .header("connection", "other")
+        .body(())
+        .unwrap();
+    let ex = exchange(get10(Some("keep-alive")), response, b"hello");
+    assert!(ex.reply.must_close_connection());
+    assert!(ex.head.contains("connection: upgrade\r\n"));
+    assert!(ex.head.contains("connection: other\r\n"));
+    assert!(!ex.head.to_ascii_lowercase().contains("keep-alive"));
+}
+
+#[test]
 fn no_content_with_non_chunked_transfer_encoding_has_no_body() {
     let response = Response::builder()
         .status(204)

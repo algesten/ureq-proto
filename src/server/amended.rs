@@ -60,16 +60,14 @@ impl AmendedResponse {
         self.headers.retain_mut(|(name, value)| {
             *name != header::CONNECTION || remove_keep_alive_token(value)
         });
-        let headers = self.response.headers_mut();
-        let values: Vec<_> = headers
-            .get_all(header::CONNECTION)
-            .iter()
-            .cloned()
-            .collect();
-        headers.remove(header::CONNECTION);
-        for mut value in values {
-            if remove_keep_alive_token(&mut value) {
-                headers.append(header::CONNECTION, value);
+        if let http::header::Entry::Occupied(entry) =
+            self.response.headers_mut().entry(header::CONNECTION)
+        {
+            let (_, values) = entry.remove_entry_mult();
+            for mut value in values {
+                if remove_keep_alive_token(&mut value) {
+                    self.headers.push((header::CONNECTION, value));
+                }
             }
         }
     }
@@ -140,15 +138,25 @@ fn remove_keep_alive_token(value: &mut HeaderValue) -> bool {
     let Ok(text) = value.to_str() else {
         return true;
     };
-    let tokens: Vec<_> = text
+    if !text
+        .split(',')
+        .any(|token| token.trim().eq_ignore_ascii_case("keep-alive"))
+    {
+        return true;
+    }
+    let mut tokens = text
         .split(',')
         .map(str::trim)
-        .filter(|token| !token.eq_ignore_ascii_case("keep-alive") && !token.is_empty())
-        .collect();
-    if tokens.is_empty() {
+        .filter(|token| !token.eq_ignore_ascii_case("keep-alive") && !token.is_empty());
+    let Some(first) = tokens.next() else {
         return false;
+    };
+    let mut result = first.to_owned();
+    for token in tokens {
+        result.push_str(", ");
+        result.push_str(token);
     }
-    *value = HeaderValue::from_str(&tokens.join(", ")).expect("valid header tokens");
+    *value = HeaderValue::from_str(&result).expect("valid header tokens");
     true
 }
 
