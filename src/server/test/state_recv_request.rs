@@ -367,6 +367,18 @@ fn unsupported_coding_with_quoted_comma() {
 }
 
 #[test]
+fn malformed_unsupported_coding_is_bad_header() {
+    for coding in ["gzip@", "gzip;", "gzip; key", "gzip; key=", "gzip garbage"] {
+        let headers = format!("transfer-encoding: {coding}, chunked\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.1", &headers),
+            Some(Error::BadTransferEncodingHeader),
+            "{coding}"
+        );
+    }
+}
+
+#[test]
 fn http10_request_transfer_encoding_is_rejected() {
     for headers in [
         "transfer-encoding: chunked\r\n",
