@@ -9,8 +9,6 @@ use crate::ext::HeaderIterExt;
 pub(crate) struct AmendedResponse {
     response: Response<()>,
     headers: Vec<(HeaderName, HeaderValue)>,
-    omit_transfer_encoding: bool,
-    omit_content_length: bool,
 }
 
 impl AmendedResponse {
@@ -18,8 +16,6 @@ impl AmendedResponse {
         AmendedResponse {
             response,
             headers: vec![],
-            omit_transfer_encoding: false,
-            omit_content_length: false,
         }
     }
 
@@ -45,16 +41,19 @@ impl AmendedResponse {
         Ok(())
     }
 
-    /// Leave `Transfer-Encoding` out of the written headers.
-    ///
-    /// Transfer codings are HTTP/1.1 only. The header still counts for
-    /// [`analyze()`][Self::analyze], which decides the body mode.
-    pub fn omit_transfer_encoding(&mut self) {
-        self.omit_transfer_encoding = true;
-        let has_transfer_encoding = self
-            .all_headers()
-            .any(|(k, _)| *k == header::TRANSFER_ENCODING);
-        self.omit_content_length = has_transfer_encoding;
+    /// Remove HTTP/1.1 framing headers after analyzing the original response.
+    pub fn remove_transfer_encoding(&mut self) -> bool {
+        let has_transfer_encoding = self.headers().any(|(k, _)| *k == header::TRANSFER_ENCODING);
+        if has_transfer_encoding {
+            self.headers.retain(|(name, _)| {
+                *name != header::TRANSFER_ENCODING && *name != header::CONTENT_LENGTH
+            });
+            self.response
+                .headers_mut()
+                .remove(header::TRANSFER_ENCODING);
+            self.response.headers_mut().remove(header::CONTENT_LENGTH);
+        }
+        has_transfer_encoding
     }
 
     pub fn remove_keep_alive(&mut self) {
@@ -75,15 +74,7 @@ impl AmendedResponse {
         }
     }
 
-    /// The headers as they go on the wire.
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
-        self.all_headers().filter(move |(k, _)| {
-            !(self.omit_transfer_encoding && **k == header::TRANSFER_ENCODING
-                || self.omit_content_length && **k == header::CONTENT_LENGTH)
-        })
-    }
-
-    fn all_headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
         self.headers
             .iter()
             .map(|v| (&v.0, &v.1))
@@ -91,7 +82,7 @@ impl AmendedResponse {
     }
 
     fn headers_get_all(&self, key: HeaderName) -> impl Iterator<Item = &HeaderValue> {
-        self.all_headers()
+        self.headers()
             .filter(move |(k, _)| *k == key)
             .map(|(_, v)| v)
     }
