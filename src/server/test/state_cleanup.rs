@@ -115,6 +115,29 @@ fn close_due_to_server_connection_close() {
 }
 
 #[test]
+fn close_due_to_server_connection_close_token() {
+    for value in ["Close", "upgrade, Close"] {
+        let scenario = Scenario::builder()
+            .get("/path")
+            .response(
+                Response::builder()
+                    .header("connection", value)
+                    .header("content-length", "0")
+                    .body(())
+                    .unwrap(),
+            )
+            .build();
+        let reply = scenario.to_cleanup();
+        assert!(
+            reply
+                .inner()
+                .close_reason
+                .contains(&CloseReason::ServerConnectionClose)
+        );
+    }
+}
+
+#[test]
 fn close_due_to_http10() {
     // Create a scenario with an HTTP/1.0 request
     let scenario = Scenario::builder()
