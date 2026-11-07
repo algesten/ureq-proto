@@ -62,6 +62,10 @@ impl Reply<SendBody> {
             return Err(Error::BodyIsChunked);
         }
 
+        if amount > 0 && writer.is_close_delimited() && writer.is_ended() {
+            return Err(Error::BodyContentAfterFinish);
+        }
+
         if let Some(left) = writer.left_to_send() {
             if amount as u64 > left {
                 return Err(Error::BodyLargerThanContentLength);
