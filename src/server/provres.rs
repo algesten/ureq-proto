@@ -30,7 +30,7 @@ impl Reply<ProvideResponse> {
             .as_ref()
             .unwrap()
             .headers()
-            .any(|(h, v)| h == header::CONNECTION && v == "close");
+            .has(header::CONNECTION, "close");
         if server_close {
             inner.record_close_reason(CloseReason::ServerConnectionClose);
         }
@@ -67,8 +67,11 @@ impl Reply<ProvideResponse> {
             // Chunked coding is HTTP/1.1 only (RFC 9112 section 7.1). An HTTP/1.0
             // client reads the body until the connection closes, and a
             // Transfer-Encoding header means nothing to it.
+            let has_transfer_encoding = response
+                .headers()
+                .any(|(h, _)| *h == header::TRANSFER_ENCODING);
             response.omit_transfer_encoding();
-            if body_mode.is_chunked() {
+            if body_mode.is_chunked() || has_transfer_encoding {
                 body_mode = BodyWriter::new_close_delimited();
             }
         }

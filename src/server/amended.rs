@@ -10,6 +10,7 @@ pub(crate) struct AmendedResponse {
     response: Response<()>,
     headers: Vec<(HeaderName, HeaderValue)>,
     omit_transfer_encoding: bool,
+    omit_content_length: bool,
 }
 
 impl AmendedResponse {
@@ -18,6 +19,7 @@ impl AmendedResponse {
             response,
             headers: vec![],
             omit_transfer_encoding: false,
+            omit_content_length: false,
         }
     }
 
@@ -49,12 +51,17 @@ impl AmendedResponse {
     /// [`analyze()`][Self::analyze], which decides the body mode.
     pub fn omit_transfer_encoding(&mut self) {
         self.omit_transfer_encoding = true;
+        let has_transfer_encoding = self
+            .all_headers()
+            .any(|(k, _)| *k == header::TRANSFER_ENCODING);
+        self.omit_content_length = has_transfer_encoding;
     }
 
     /// The headers as they go on the wire.
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
         self.all_headers().filter(move |(k, _)| {
-            !(self.omit_transfer_encoding && **k == header::TRANSFER_ENCODING)
+            !(self.omit_transfer_encoding && **k == header::TRANSFER_ENCODING
+                || self.omit_content_length && **k == header::CONTENT_LENGTH)
         })
     }
 
