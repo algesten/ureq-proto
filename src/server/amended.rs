@@ -42,18 +42,12 @@ impl AmendedResponse {
     }
 
     /// Remove HTTP/1.1 framing headers after analyzing the original response.
-    pub fn remove_transfer_encoding(&mut self) -> bool {
-        let has_transfer_encoding = self.headers().any(|(k, _)| *k == header::TRANSFER_ENCODING);
-        if has_transfer_encoding {
-            self.headers.retain(|(name, _)| {
-                *name != header::TRANSFER_ENCODING && *name != header::CONTENT_LENGTH
-            });
-            self.response
-                .headers_mut()
-                .remove(header::TRANSFER_ENCODING);
-            self.response.headers_mut().remove(header::CONTENT_LENGTH);
-        }
-        has_transfer_encoding
+    pub fn remove_transfer_encoding(&mut self) {
+        self.headers
+            .retain(|(name, _)| *name != header::TRANSFER_ENCODING);
+        self.response
+            .headers_mut()
+            .remove(header::TRANSFER_ENCODING);
     }
 
     pub fn remove_keep_alive(&mut self) {
