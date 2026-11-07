@@ -5,6 +5,7 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method, header};
 
 use crate::Error;
 use crate::chunk::Dechunker;
+#[cfg(feature = "client")]
 use crate::ext::HeaderIterExt;
 use crate::util::{Writer, log_data};
 
@@ -306,26 +307,34 @@ impl BodyReader {
     ) -> Result<Self, Error> {
         use crate::ext::MethodExt;
 
-        // RFC 9112 section 6.3: unframed requests have a zero-length body.
-        let defined = Self::header_defined(http10, headers)?;
+        // Validate framing even when the method makes us ignore the body.
         let has_transfer_encoding = headers.contains_key(header::TRANSFER_ENCODING);
-        let has_content_length = headers.contains_key(header::CONTENT_LENGTH);
-        if defined.is_none() && has_transfer_encoding {
-            return Err(Error::BadHeader("invalid request transfer-encoding".into()));
+
+        if has_transfer_encoding && http10 {
+            // RFC 9112 section 6.1: Transfer-Encoding in HTTP/1.0 is faulty framing.
+            return Err(Error::TransferEncodingInHttp10);
         }
 
         // RFC 9112 section 6.3: a request with both Transfer-Encoding and
         // Content-Length may be an attempt at request smuggling. Reject it
         // instead of picking one framing.
-        if has_transfer_encoding && has_content_length {
+        if has_transfer_encoding && headers.contains_key(header::CONTENT_LENGTH) {
             return Err(Error::ConflictingBodyHeaders);
         }
+
+        let chunked = request_transfer_encoding(headers)?;
+        let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
+
         if !method.allow_request_body() && !force_send {
             return Ok(Self::NoBody);
         }
-        let ret = defined.unwrap_or(Self::NoBody);
 
-        Ok(ret)
+        Ok(match content_length {
+            _ if chunked => Self::Chunked(Dechunker::new()),
+            Some(len) => Self::LengthDelimited(len),
+            // RFC 9112 section 6.3: unframed requests have a zero-length body.
+            None => Self::NoBody,
+        })
     }
 
     #[cfg(feature = "client")]
@@ -358,6 +367,7 @@ impl BodyReader {
         }
     }
 
+    #[cfg(feature = "client")]
     fn header_defined(http10: bool, headers: &HeaderMap) -> Result<Option<Self>, Error> {
         let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
 
@@ -592,6 +602,185 @@ fn trim_ows(mut b: &[u8]) -> &[u8] {
     b
 }
 
+/// Validate the `Transfer-Encoding` of a request across all of its header lines.
+///
+/// Returns whether the request body is chunked. The only coding we decode is
+/// `chunked`, and RFC 9112 section 6.1 requires it to be the final coding of a
+/// request, applied once and without parameters. Any other coding before it is
+/// reported as [`Error::UnsupportedTransferCoding`] so the caller can answer
+/// 501 (RFC 9112 section 6.1). Empty list elements are ignored (RFC 9110
+/// section 5.6.1.2), but at least one coding is required.
+#[cfg(feature = "server")]
+fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
+    let mut chunked = false;
+    let mut unsupported = false;
+
+    for value in headers.get_all(header::TRANSFER_ENCODING) {
+        let mut remaining = value.as_bytes();
+        while !remaining.is_empty() {
+            let (element, rest) = next_transfer_element(remaining)?;
+            remaining = rest;
+            let element = trim_ows(element);
+            if element.is_empty() {
+                continue;
+            }
+            if chunked {
+                // chunked was not the final coding.
+                return Err(Error::BadTransferEncodingHeader);
+            }
+            if transfer_element_is_chunked(element)? {
+                chunked = true;
+                continue;
+            }
+            unsupported = true;
+        }
+    }
+
+    // A header without any coding is as ambiguous as one not ending in chunked.
+    if headers.contains_key(header::TRANSFER_ENCODING) && !chunked {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    if unsupported {
+        return Err(Error::UnsupportedTransferCoding);
+    }
+
+    Ok(chunked)
+}
+
+#[cfg(feature = "server")]
+fn next_transfer_element(bytes: &[u8]) -> Result<(&[u8], &[u8]), Error> {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quoted && b == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if b == b'"' {
+            quoted = !quoted;
+            continue;
+        }
+        if b == b',' && !quoted {
+            return Ok((&bytes[..i], &bytes[i + 1..]));
+        }
+    }
+    if quoted {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    Ok((bytes, &[]))
+}
+
+#[cfg(feature = "server")]
+fn transfer_element_is_chunked(element: &[u8]) -> Result<bool, Error> {
+    let name_len = element.iter().take_while(|b| is_token(**b)).count();
+    if name_len == 0 {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    let (name, params) = element.split_at(name_len);
+    if name.eq_ignore_ascii_case(b"chunked") {
+        if !trim_ows(params).is_empty() {
+            return Err(Error::BadTransferEncodingHeader);
+        }
+        return Ok(true);
+    }
+    if !valid_transfer_parameters(params) {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    Ok(false)
+}
+
+#[cfg(feature = "server")]
+fn is_token(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+        || matches!(
+            b,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
+}
+
+#[cfg(feature = "server")]
+fn valid_transfer_parameters(mut params: &[u8]) -> bool {
+    loop {
+        params = trim_ows(params);
+        if params.is_empty() {
+            return true;
+        }
+        let Some(rest) = params.strip_prefix(b";") else {
+            return false;
+        };
+        params = trim_ows(rest);
+        let len = params.iter().take_while(|b| is_token(**b)).count();
+        if len == 0 {
+            return false;
+        }
+        params = trim_ows(&params[len..]);
+        let Some(rest) = params.strip_prefix(b"=") else {
+            return false;
+        };
+        params = trim_ows(rest);
+        if let Some(rest) = params.strip_prefix(b"\"") {
+            let Some(rest) = after_quoted_string(rest) else {
+                return false;
+            };
+            params = rest;
+            continue;
+        }
+        let len = params.iter().take_while(|b| is_token(**b)).count();
+        if len == 0 {
+            return false;
+        }
+        params = &params[len..];
+    }
+}
+
+#[cfg(feature = "server")]
+fn after_quoted_string(bytes: &[u8]) -> Option<&[u8]> {
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if escaped {
+            if !(b == b'\t' || b == b' ' || (0x21..=0x7e).contains(&b) || b >= 0x80) {
+                return None;
+            }
+            escaped = false;
+            continue;
+        }
+        if b == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if b == b'"' {
+            return Some(&bytes[i + 1..]);
+        }
+        if !(b == b'\t'
+            || b == b' '
+            || b == 0x21
+            || (0x23..=0x5b).contains(&b)
+            || (0x5d..=0x7e).contains(&b)
+            || b >= 0x80)
+        {
+            return None;
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -674,33 +863,52 @@ mod test {
 mod transfer_encoding_tests {
     use super::*;
 
-    #[test]
-    fn readers_detect_chunked_in_lists_and_repeated_headers() {
-        for values in [
-            vec!["gzip, chunked"],
-            vec!["chunked, gzip"],
-            vec!["gzip", " ChUnKeD "],
-        ] {
-            let mut headers = HeaderMap::new();
-            for value in values {
-                headers.append(
-                    header::TRANSFER_ENCODING,
-                    HeaderValue::from_str(value).unwrap(),
-                );
-            }
-            #[cfg(feature = "server")]
-            assert_eq!(
-                BodyReader::for_request(false, &Method::POST, false, &headers)
-                    .unwrap()
-                    .body_mode(),
-                BodyMode::Chunked
+    fn transfer_encoding(values: &[&str]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for value in values {
+            headers.append(
+                header::TRANSFER_ENCODING,
+                HeaderValue::from_str(value).unwrap(),
             );
-            #[cfg(feature = "client")]
+        }
+        headers
+    }
+
+    /// Responses we receive are decoded leniently: any list naming chunked is
+    /// read as chunked.
+    #[cfg(feature = "client")]
+    #[test]
+    fn response_reader_detects_chunked_in_lists_and_repeated_headers() {
+        for values in [
+            &["gzip, chunked"][..],
+            &["chunked, gzip"],
+            &["gzip", " ChUnKeD "],
+        ] {
+            let headers = transfer_encoding(values);
             assert_eq!(
                 BodyReader::for_response(false, &Method::GET, 200, false, &headers)
                     .unwrap()
                     .body_mode(),
                 BodyMode::Chunked
+            );
+        }
+    }
+
+    /// Requests we receive are framed strictly: chunked must be the only
+    /// coding (RFC 9112 section 6.1), and only chunked is decoded.
+    #[cfg(feature = "server")]
+    #[test]
+    fn request_reader_rejects_codings_other_than_chunked() {
+        for (values, err) in [
+            (&["gzip, chunked"][..], Error::UnsupportedTransferCoding),
+            (&["chunked, gzip"], Error::BadTransferEncodingHeader),
+            (&["gzip", " ChUnKeD "], Error::UnsupportedTransferCoding),
+        ] {
+            let headers = transfer_encoding(values);
+            assert_eq!(
+                BodyReader::for_request(false, &Method::POST, false, &headers).unwrap_err(),
+                err,
+                "{values:?}"
             );
         }
     }

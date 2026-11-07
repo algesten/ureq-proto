@@ -312,3 +312,127 @@ fn head_and_connect_reject_conflicting_body_headers() {
         assert_eq!(err, Error::ConflictingBodyHeaders, "{method}");
     }
 }
+
+fn request_error(method: &str, version: &str, headers: &str) -> Option<Error> {
+    let input = format!("{method} / {version}\r\nhost: example.com\r\n{headers}\r\n");
+    Reply::new().unwrap().try_request(input.as_bytes()).err()
+}
+
+#[test]
+fn strict_request_transfer_encoding() {
+    for headers in [
+        "transfer-encoding: gzip\r\n",
+        "transfer-encoding: chunked, gzip\r\n",
+        "transfer-encoding: chunked\r\ntransfer-encoding: gzip\r\n",
+        "transfer-encoding: chunked, chunked\r\n",
+        "transfer-encoding: chunked;foo=bar\r\n",
+        "transfer-encoding: \r\n",
+        "transfer-encoding: ,\r\n",
+        "transfer-encoding: \"chunked\"\r\n",
+    ] {
+        for method in ["POST", "HEAD"] {
+            assert_eq!(
+                request_error(method, "HTTP/1.1", headers),
+                Some(Error::BadTransferEncodingHeader),
+                "{method} {headers}"
+            );
+        }
+    }
+}
+
+#[test]
+fn unsupported_request_transfer_coding() {
+    for headers in [
+        "transfer-encoding: gzip\r\ntransfer-encoding: chunked\r\n",
+        "transfer-encoding: gzip, ChUnKeD\r\n",
+        "transfer-encoding: custom; key=\"a,b\", chunked\r\n",
+    ] {
+        for method in ["POST", "HEAD"] {
+            assert_eq!(
+                request_error(method, "HTTP/1.1", headers),
+                Some(Error::UnsupportedTransferCoding),
+                "{method} {headers}"
+            );
+        }
+    }
+}
+
+#[test]
+fn unsupported_coding_with_quoted_comma() {
+    let headers = "transfer-encoding: custom; key=\"a, chunked\", chunked\r\n";
+    assert_eq!(
+        request_error("POST", "HTTP/1.1", headers),
+        Some(Error::UnsupportedTransferCoding)
+    );
+}
+
+#[test]
+fn malformed_unsupported_coding_is_bad_header() {
+    for coding in ["gzip@", "gzip;", "gzip; key", "gzip; key=", "gzip garbage"] {
+        let headers = format!("transfer-encoding: {coding}, chunked\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.1", &headers),
+            Some(Error::BadTransferEncodingHeader),
+            "{coding}"
+        );
+    }
+}
+
+#[test]
+fn http10_request_transfer_encoding_is_rejected() {
+    for headers in [
+        "transfer-encoding: chunked\r\n",
+        "transfer-encoding: chunked\r\nconnection: keep-alive\r\n",
+        "transfer-encoding: chunked\r\ncontent-length: 5\r\n",
+    ] {
+        assert_eq!(
+            request_error("POST", "HTTP/1.0", headers),
+            Some(Error::TransferEncodingInHttp10),
+            "{headers}"
+        );
+    }
+}
+
+#[test]
+fn chunked_request_transfer_encoding() {
+    for headers in [
+        "transfer-encoding: chunked\r\n",
+        "transfer-encoding: ChUnKeD\r\n",
+        "transfer-encoding: chunked,\r\n",
+        "transfer-encoding: , chunked\r\n",
+        "transfer-encoding: \r\ntransfer-encoding: chunked\r\n",
+        "transfer-encoding: chunked ,  , \r\n",
+    ] {
+        let input = format!("POST / HTTP/1.1\r\nhost: example.com\r\n{headers}\r\n");
+        let mut reply = Reply::new().unwrap();
+        reply.try_request(input.as_bytes()).unwrap();
+        let Some(RecvRequestResult::RecvBody(reply)) = reply.proceed() else {
+            panic!("{headers}")
+        };
+        assert_eq!(reply.body_mode(), crate::BodyMode::Chunked, "{headers}");
+    }
+}
+
+#[test]
+fn transfer_encoding_and_content_length_conflict_even_for_invalid_codings() {
+    for coding in ["gzip", "gzip, chunked", "chunked, gzip", ""] {
+        let headers = format!("transfer-encoding: {coding}\r\ncontent-length: 5\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.1", &headers),
+            Some(Error::ConflictingBodyHeaders),
+            "{coding:?}"
+        );
+    }
+}
+
+#[test]
+fn http10_rejects_every_transfer_encoding() {
+    for coding in ["gzip", "gzip, chunked", "chunked, gzip", ""] {
+        let headers = format!("transfer-encoding: {coding}\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.0", &headers),
+            Some(Error::TransferEncodingInHttp10),
+            "{coding:?}"
+        );
+    }
+}
