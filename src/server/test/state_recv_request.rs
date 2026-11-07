@@ -392,3 +392,27 @@ fn chunked_request_transfer_encoding() {
         assert_eq!(reply.body_mode(), crate::BodyMode::Chunked, "{headers}");
     }
 }
+
+#[test]
+fn transfer_encoding_and_content_length_conflict_even_for_invalid_codings() {
+    for coding in ["gzip", "gzip, chunked", "chunked, gzip", ""] {
+        let headers = format!("transfer-encoding: {coding}\r\ncontent-length: 5\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.1", &headers),
+            Some(Error::ConflictingBodyHeaders),
+            "{coding:?}"
+        );
+    }
+}
+
+#[test]
+fn http10_rejects_every_transfer_encoding() {
+    for coding in ["gzip", "gzip, chunked", "chunked, gzip", ""] {
+        let headers = format!("transfer-encoding: {coding}\r\n");
+        assert_eq!(
+            request_error("POST", "HTTP/1.0", &headers),
+            Some(Error::TransferEncodingInHttp10),
+            "{coding:?}"
+        );
+    }
+}
