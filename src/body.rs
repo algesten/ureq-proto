@@ -270,10 +270,9 @@ impl BodyReader {
         use crate::ext::MethodExt;
 
         // Validate framing even when the method makes us ignore the body.
-        let chunked = request_transfer_encoding(headers)?;
-        let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
+        let has_transfer_encoding = headers.contains_key(header::TRANSFER_ENCODING);
 
-        if chunked && http10 {
+        if has_transfer_encoding && http10 {
             // RFC 9112 section 6.1: Transfer-Encoding in HTTP/1.0 is faulty framing.
             return Err(Error::TransferEncodingInHttp10);
         }
@@ -281,9 +280,12 @@ impl BodyReader {
         // RFC 9112 section 6.3: a request with both Transfer-Encoding and
         // Content-Length may be an attempt at request smuggling. Reject it
         // instead of picking one framing.
-        if chunked && content_length.is_some() {
+        if has_transfer_encoding && headers.contains_key(header::CONTENT_LENGTH) {
             return Err(Error::ConflictingBodyHeaders);
         }
+
+        let chunked = request_transfer_encoding(headers)?;
+        let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;
 
         if !method.allow_request_body() && !force_send {
             return Ok(Self::NoBody);
@@ -327,7 +329,6 @@ impl BodyReader {
         }
     }
 
-    #[cfg(feature = "client")]
     #[cfg(feature = "client")]
     fn header_defined(http10: bool, headers: &HeaderMap) -> Result<Option<Self>, Error> {
         let content_length = parse_content_length(headers.get_all(header::CONTENT_LENGTH).iter())?;

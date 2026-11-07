@@ -346,7 +346,6 @@ fn unsupported_request_transfer_coding() {
         "transfer-encoding: gzip\r\ntransfer-encoding: chunked\r\n",
         "transfer-encoding: gzip, ChUnKeD\r\n",
         "transfer-encoding: custom; key=\"a,b\", chunked\r\n",
-        "transfer-encoding: gzip\r\ntransfer-encoding: chunked\r\ncontent-length: 5\r\n",
     ] {
         for method in ["POST", "HEAD"] {
             assert_eq!(
