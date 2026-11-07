@@ -25,14 +25,12 @@ impl Reply<ProvideResponse> {
         let mut inner = append_request(self.inner, response);
 
         // unwrap are correct due to state we should be in when we get here.
-        let response = inner.response.as_ref().unwrap();
-        let server_close = if inner.http10 {
-            response.headers().has(header::CONNECTION, "close")
-        } else {
-            response
-                .headers()
-                .any(|(h, v)| h == header::CONNECTION && v == "close")
-        };
+        let server_close = inner
+            .response
+            .as_ref()
+            .unwrap()
+            .headers()
+            .has(header::CONNECTION, "close");
         if server_close {
             inner.record_close_reason(CloseReason::ServerConnectionClose);
         }
