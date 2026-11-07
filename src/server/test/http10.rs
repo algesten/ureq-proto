@@ -273,3 +273,30 @@ fn transfer_encoding_with_content_length_is_close_delimited() {
     assert!(!ex.head.contains("content-length:"));
     assert!(ex.reply.must_close_connection());
 }
+
+#[test]
+fn close_delimited_response_does_not_advertise_keep_alive() {
+    let response = Response::builder()
+        .header("connection", "keep-alive")
+        .body(())
+        .unwrap();
+    let ex = exchange(get10(Some("keep-alive")), response, b"hello");
+    assert!(ex.reply.must_close_connection());
+    assert!(!ex.head.contains("connection: keep-alive"));
+}
+
+#[test]
+fn no_content_with_non_chunked_transfer_encoding_has_no_body() {
+    let response = Response::builder()
+        .status(204)
+        .header("transfer-encoding", "gzip")
+        .body(())
+        .unwrap();
+    let scenario = Scenario::builder()
+        .request(get10(Some("keep-alive")))
+        .response(response)
+        .build();
+    let mut reply = scenario.to_send_response();
+    reply.write(&mut [0; 1024]).unwrap();
+    assert!(matches!(reply.proceed(), SendResponseResult::Cleanup(_)));
+}
