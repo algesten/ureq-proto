@@ -57,6 +57,24 @@ impl AmendedResponse {
         self.omit_content_length = has_transfer_encoding;
     }
 
+    pub fn remove_keep_alive(&mut self) {
+        self.headers.retain_mut(|(name, value)| {
+            *name != header::CONNECTION || remove_keep_alive_token(value)
+        });
+        let headers = self.response.headers_mut();
+        let values: Vec<_> = headers
+            .get_all(header::CONNECTION)
+            .iter()
+            .cloned()
+            .collect();
+        headers.remove(header::CONNECTION);
+        for mut value in values {
+            if remove_keep_alive_token(&mut value) {
+                headers.append(header::CONNECTION, value);
+            }
+        }
+    }
+
     /// The headers as they go on the wire.
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
         self.all_headers().filter(move |(k, _)| {
@@ -125,6 +143,22 @@ impl AmendedResponse {
             res_body_header,
         })
     }
+}
+
+fn remove_keep_alive_token(value: &mut HeaderValue) -> bool {
+    let Ok(text) = value.to_str() else {
+        return true;
+    };
+    let tokens: Vec<_> = text
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.eq_ignore_ascii_case("keep-alive") && !token.is_empty())
+        .collect();
+    if tokens.is_empty() {
+        return false;
+    }
+    *value = HeaderValue::from_str(&tokens.join(", ")).expect("valid header tokens");
+    true
 }
 
 pub(crate) struct ResponseInfo {

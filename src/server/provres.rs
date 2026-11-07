@@ -71,7 +71,7 @@ impl Reply<ProvideResponse> {
                 .headers()
                 .any(|(h, _)| *h == header::TRANSFER_ENCODING);
             response.omit_transfer_encoding();
-            if body_mode.is_chunked() || has_transfer_encoding {
+            if body_mode.is_chunked() || (has_transfer_encoding && should_send_body) {
                 body_mode = BodyWriter::new_close_delimited();
             }
         }
@@ -96,6 +96,10 @@ impl Reply<ProvideResponse> {
 
         if writer.is_close_delimited() {
             inner.record_close_reason(CloseReason::CloseDelimitedBody);
+        }
+
+        if inner.http10 && !inner.close_reason.is_empty() && response_keep_alive {
+            inner.response.as_mut().unwrap().remove_keep_alive();
         }
 
         // An HTTP/1.0 client assumes the server closes unless told otherwise
