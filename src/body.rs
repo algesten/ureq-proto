@@ -578,20 +578,10 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
     let mut unsupported = false;
 
     for value in headers.get_all(header::TRANSFER_ENCODING) {
-        let mut quoted = false;
-        let mut escaped = false;
-        for element in value.as_bytes().split(|b| {
-            if escaped {
-                escaped = false;
-            } else if quoted && *b == b'\\' {
-                escaped = true;
-            } else if *b == b'"' {
-                quoted = !quoted;
-            } else if *b == b',' && !quoted {
-                return true;
-            }
-            false
-        }) {
+        let mut remaining = value.as_bytes();
+        while !remaining.is_empty() {
+            let (element, rest) = next_transfer_element(remaining)?;
+            remaining = rest;
             let element = trim_ows(element);
             if element.is_empty() {
                 continue;
@@ -600,27 +590,11 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
                 // chunked was not the final coding.
                 return Err(Error::BadTransferEncodingHeader);
             }
-
-            let name_len = element.iter().take_while(|b| is_token(**b)).count();
-            if name_len == 0 {
-                return Err(Error::BadTransferEncodingHeader);
-            }
-            let (name, params) = element.split_at(name_len);
-
-            if name.eq_ignore_ascii_case(b"chunked") {
-                if !trim_ows(params).is_empty() {
-                    return Err(Error::BadTransferEncodingHeader);
-                }
+            if transfer_element_is_chunked(element)? {
                 chunked = true;
                 continue;
             }
-            if !valid_transfer_parameters(params) {
-                return Err(Error::BadTransferEncodingHeader);
-            }
             unsupported = true;
-        }
-        if quoted {
-            return Err(Error::BadTransferEncodingHeader);
         }
     }
 
@@ -633,6 +607,52 @@ fn request_transfer_encoding(headers: &HeaderMap) -> Result<bool, Error> {
     }
 
     Ok(chunked)
+}
+
+#[cfg(feature = "server")]
+fn next_transfer_element(bytes: &[u8]) -> Result<(&[u8], &[u8]), Error> {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if quoted && b == b'\\' {
+            escaped = true;
+            continue;
+        }
+        if b == b'"' {
+            quoted = !quoted;
+            continue;
+        }
+        if b == b',' && !quoted {
+            return Ok((&bytes[..i], &bytes[i + 1..]));
+        }
+    }
+    if quoted {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    Ok((bytes, &[]))
+}
+
+#[cfg(feature = "server")]
+fn transfer_element_is_chunked(element: &[u8]) -> Result<bool, Error> {
+    let name_len = element.iter().take_while(|b| is_token(**b)).count();
+    if name_len == 0 {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    let (name, params) = element.split_at(name_len);
+    if name.eq_ignore_ascii_case(b"chunked") {
+        if !trim_ows(params).is_empty() {
+            return Err(Error::BadTransferEncodingHeader);
+        }
+        return Ok(true);
+    }
+    if !valid_transfer_parameters(params) {
+        return Err(Error::BadTransferEncodingHeader);
+    }
+    Ok(false)
 }
 
 #[cfg(feature = "server")]
