@@ -69,6 +69,22 @@ impl Reply<ProvideResponse> {
             // Chunked coding is HTTP/1.1 only (RFC 9112 section 7.1). An HTTP/1.0
             // client reads the body until the connection closes, and a
             // Transfer-Encoding header means nothing to it.
+            for (_, value) in response
+                .headers()
+                .filter(|(name, _)| **name == header::TRANSFER_ENCODING)
+            {
+                let value = value.to_str().map_err(|_| {
+                    Error::BadHeader("unsupported response transfer-encoding".into())
+                })?;
+                if value
+                    .split(',')
+                    .any(|token| !token.trim().eq_ignore_ascii_case("chunked"))
+                {
+                    return Err(Error::BadHeader(
+                        "unsupported response transfer-encoding".into(),
+                    ));
+                }
+            }
             response.remove_transfer_encoding();
             if body_mode.is_chunked() {
                 body_mode = BodyWriter::new_close_delimited();

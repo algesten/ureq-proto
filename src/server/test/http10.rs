@@ -208,6 +208,21 @@ fn caller_transfer_encoding_is_dropped() {
 }
 
 #[test]
+fn unsupported_transfer_coding_is_rejected() {
+    for coding in ["gzip", "gzip, chunked"] {
+        let response = Response::builder()
+            .header("transfer-encoding", coding)
+            .body(())
+            .unwrap();
+        let scenario = Scenario::builder().request(get10(None)).build();
+        assert!(matches!(
+            scenario.to_provide_response().provide(response),
+            Err(crate::Error::BadHeader(_))
+        ));
+    }
+}
+
+#[test]
 fn close_delimited_direct_write() {
     let scenario = Scenario::builder()
         .request(get10(None))
