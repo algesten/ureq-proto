@@ -41,31 +41,6 @@ impl AmendedResponse {
         Ok(())
     }
 
-    /// Remove HTTP/1.1 framing headers after analyzing the original response.
-    pub fn remove_transfer_encoding(&mut self) {
-        self.headers
-            .retain(|(name, _)| *name != header::TRANSFER_ENCODING);
-        self.response
-            .headers_mut()
-            .remove(header::TRANSFER_ENCODING);
-    }
-
-    pub fn remove_keep_alive(&mut self) {
-        self.headers.retain_mut(|(name, value)| {
-            *name != header::CONNECTION || remove_keep_alive_token(value)
-        });
-        if let http::header::Entry::Occupied(entry) =
-            self.response.headers_mut().entry(header::CONNECTION)
-        {
-            let (_, values) = entry.remove_entry_mult();
-            for mut value in values {
-                if remove_keep_alive_token(&mut value) {
-                    self.headers.push((header::CONNECTION, value));
-                }
-            }
-        }
-    }
-
     pub fn headers(&self) -> impl Iterator<Item = (&HeaderName, &HeaderValue)> {
         self.headers
             .iter()
@@ -125,6 +100,31 @@ impl AmendedResponse {
             body_mode,
             res_body_header,
         })
+    }
+
+    /// Remove HTTP/1.1 framing headers after analyzing the original response.
+    pub fn remove_transfer_encoding(&mut self) {
+        self.headers
+            .retain(|(name, _)| *name != header::TRANSFER_ENCODING);
+        self.response
+            .headers_mut()
+            .remove(header::TRANSFER_ENCODING);
+    }
+
+    pub fn remove_keep_alive(&mut self) {
+        self.headers.retain_mut(|(name, value)| {
+            *name != header::CONNECTION || remove_keep_alive_token(value)
+        });
+        if let http::header::Entry::Occupied(entry) =
+            self.response.headers_mut().entry(header::CONNECTION)
+        {
+            let (_, values) = entry.remove_entry_mult();
+            for mut value in values {
+                if remove_keep_alive_token(&mut value) {
+                    self.headers.push((header::CONNECTION, value));
+                }
+            }
+        }
     }
 }
 
