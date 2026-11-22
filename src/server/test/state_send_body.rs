@@ -291,3 +291,38 @@ fn error_consuming_direct_write_with_chunked() {
         _ => panic!("Expected BodyIsChunked error"),
     }
 }
+
+#[test]
+fn chunked_finish_waits_for_output_capacity() {
+    let mut scenario = Scenario::builder()
+        .get("/path")
+        .response(
+            http::Response::builder()
+                .header("transfer-encoding", "chunked")
+                .body(())
+                .unwrap(),
+        )
+        .build()
+        .to_send_body();
+
+    let mut output = [0u8; 64];
+    let (input_used, output_used) = scenario.write(b"hi", &mut output).unwrap();
+    assert_eq!(input_used, 2);
+    assert_eq!(&output[..output_used], b"2\r\nhi\r\n");
+    assert!(!scenario.is_finished());
+
+    // Fewer than 5 bytes available: terminating chunk cannot fit, so body is not finished.
+    let mut short = [0u8; 4];
+    let (input_used, output_used) = scenario.write(&[], &mut short).unwrap();
+    assert_eq!((input_used, output_used), (0, 0));
+    assert!(!scenario.is_finished());
+
+    // Retry with enough space for "0\r\n\r\n".
+    let mut tail = [0u8; 5];
+    let (input_used, output_used) = scenario.write(&[], &mut tail).unwrap();
+    assert_eq!((input_used, output_used), (0, 5));
+    assert_eq!(&tail, b"0\r\n\r\n");
+    assert!(scenario.is_finished());
+
+    let _cleanup = scenario.proceed();
+}
