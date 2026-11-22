@@ -36,8 +36,9 @@ impl Reply<Send100> {
     /// Rejects the 100 Continue request and proceeds to providing a response.
     ///
     /// This method rejects the client's "Expect: 100-continue" request and transitions
-    /// to the ProvideResponse state. The server should then provide an error response
-    /// (typically a 4xx or 5xx status code) to indicate why the request was rejected.
+    /// to the ProvideResponse state. The server must then provide a final (non-1xx)
+    /// response status code (RFC 9110 §10.1.1) — typically a 4xx or 5xx error, or a
+    /// 2xx/3xx response when the request body is not needed.
     pub fn reject(mut self) -> Reply<ProvideResponse> {
         self.inner.expect_100_reject = true;
         Reply::wrap(self.inner)
