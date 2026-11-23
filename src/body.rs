@@ -104,8 +104,9 @@ impl BodyWriter {
                 let mut input_used = 0;
 
                 if input.is_empty() {
-                    self.finish(w);
-                    self.ended = true;
+                    if !self.ended && self.finish(w) {
+                        self.ended = true;
+                    }
                 } else {
                     // The chunk size might be smaller than the entire input, in which case
                     // we continue to send chunks frome the same input.
@@ -856,6 +857,37 @@ mod test {
         assert_eq!(calculate_max_input(10257), 10241);
         assert_eq!(calculate_max_input(10258), 10242);
         assert_eq!(calculate_max_input(10259), 10243);
+    }
+
+    #[test]
+    fn chunked_finish_requires_buffer_capacity() {
+        let mut writer = BodyWriter::new_chunked();
+
+        // Output buffer too small for "0\r\n\r\n" (5 bytes): must not mark ended.
+        for len in 0..5 {
+            let mut out = vec![0u8; len];
+            let mut w = Writer::new(&mut out);
+            assert_eq!(writer.write(&[], &mut w), 0);
+            assert_eq!(w.len(), 0);
+            assert!(!writer.is_ended());
+        }
+
+        // Exact 5-byte buffer succeeds and marks ended.
+        let mut out = [0u8; 5];
+        let written = {
+            let mut w = Writer::new(&mut out);
+            assert_eq!(writer.write(&[], &mut w), 0);
+            w.len()
+        };
+        assert_eq!(written, 5);
+        assert_eq!(&out, b"0\r\n\r\n");
+        assert!(writer.is_ended());
+
+        // Subsequent empty writes do not emit a duplicate terminator.
+        let mut extra = [0u8; 5];
+        let mut w = Writer::new(&mut extra);
+        assert_eq!(writer.write(&[], &mut w), 0);
+        assert_eq!(w.len(), 0);
     }
 }
 
