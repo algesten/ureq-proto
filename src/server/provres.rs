@@ -15,10 +15,7 @@ impl Reply<ProvideResponse> {
     /// Takes a Response object and transitions to the SendResponse state.
     /// Handles setting appropriate headers for the response body if they weren't already set.
     pub fn provide(self, response: Response<()>) -> Result<Reply<SendResponse>, Error> {
-        if self.inner.expect_100_reject
-            && !response.status().is_client_error()
-            && !response.status().is_server_error()
-        {
+        if self.inner.expect_100_reject && response.status().is_informational() {
             return Err(Error::BadReject100Status(response.status()));
         }
 

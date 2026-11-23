@@ -93,37 +93,46 @@ fn provide_response_after_reject_100() {
 }
 
 #[test]
-fn error_when_providing_success_after_reject_100() {
-    // Create a scenario with a POST request with Expect: 100-continue
-    let scenario = Scenario::builder()
-        .post("/path")
-        .header("expect", "100-continue")
-        .header("transfer-encoding", "chunked")
-        .build();
+fn provide_final_non_error_response_after_reject_100() {
+    for status in [StatusCode::OK, StatusCode::FOUND, StatusCode::NOT_MODIFIED] {
+        let scenario = Scenario::builder()
+            .post("/path")
+            .header("expect", "100-continue")
+            .header("transfer-encoding", "chunked")
+            .build();
 
-    // Get a Reply in the Send100 state
-    let reply = scenario.to_send_100();
+        let reply = scenario.to_send_100().reject();
 
-    // Reject the 100-continue request
-    let reply = reply.reject();
+        let response = Response::builder()
+            .status(status)
+            .header("content-length", "0")
+            .body(())
+            .unwrap();
 
-    // Create a successful response (invalid after rejecting 100-continue)
-    let response = Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "text/plain")
-        .body(())
-        .unwrap();
+        let reply = reply.provide(response).unwrap();
+        assert_eq!(reply.inner().response.as_ref().unwrap().prelude().1, status);
+    }
+}
 
-    // Provide the response (should fail)
-    let result = reply.provide(response);
+#[test]
+fn error_when_providing_informational_after_reject_100() {
+    for status in [
+        StatusCode::CONTINUE,
+        StatusCode::PROCESSING,
+        StatusCode::EARLY_HINTS,
+    ] {
+        let scenario = Scenario::builder()
+            .post("/path")
+            .header("expect", "100-continue")
+            .header("transfer-encoding", "chunked")
+            .build();
 
-    // Verify the error
-    assert!(result.is_err());
-    match result.unwrap_err() {
-        Error::BadReject100Status(status) => {
-            assert_eq!(status, StatusCode::OK);
-        }
-        _ => panic!("Expected BadReject100Status error"),
+        let reply = scenario.to_send_100().reject();
+
+        let response = Response::builder().status(status).body(()).unwrap();
+
+        let result = reply.provide(response);
+        assert_eq!(result.unwrap_err(), Error::BadReject100Status(status));
     }
 }
 

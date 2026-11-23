@@ -92,7 +92,7 @@ impl fmt::Display for Error {
             Error::HeadersWith100 => write!(f, "received headers with 100-continue response"),
             Error::BodyIsChunked => write!(f, "body is chunked"),
             Error::BadReject100Status(v) => {
-                write!(f, "expect-100 must be rejected with 4xx or 5xx: {}", v)
+                write!(f, "expect-100 must be rejected with a final status: {}", v)
             }
         }
     }
