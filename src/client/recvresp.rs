@@ -146,11 +146,7 @@ impl Call<RecvResponse> {
         let status = response.status().as_u16();
 
         if status == StatusCode::CONTINUE {
-            // There should be no headers for this response.
-            if !response.headers().is_empty() {
-                return Err(Error::HeadersWith100);
-            }
-
+            // RFC 9110 §15.2 allows header fields on 1xx; ignore them.
             return Ok(Some((input_used, response)));
         }
 

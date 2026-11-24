@@ -26,12 +26,10 @@ impl Call<Await100> {
     /// * `Ok(n)` - `n` number of input bytes were consumed. Call `proceed()` next
     /// * `Err(e)` - some error that is not recoverable
     pub fn try_read_100(&mut self, input: &[u8]) -> Result<usize, Error> {
-        // Try parsing a status line without any headers. The line we are looking for is:
-        //
-        //   HTTP/1.1 100 Continue\r\n\r\n
-        //
-        // There should be no headers.
-        match try_parse_response::<0>(input) {
+        // Parse a full interim/final response. RFC 9110 §15.2 allows header fields on
+        // 1xx responses (e.g. Traefik puts Alt-Svc on 100 Continue), so allow a modest
+        // number of headers and ignore them for 100 Continue.
+        match try_parse_response::<32>(input) {
             Ok(v) => match v {
                 Some((input_used, response)) => {
                     let status = response.status();
@@ -69,13 +67,8 @@ impl Call<Await100> {
                 self.inner.await_100_continue = false;
 
                 if e == Error::HttpParseTooManyHeaders {
-                    // We encountered headers after the status line. That means the server did
-                    // not send 100-continue, and also continued to produce an answer before we
-                    // sent the body. Regardless of what the answer is, we must not send the body.
-                    // A 200-answer would be nonsensical given we haven't yet sent the body.
-                    //
-                    // We do however want to receive the response to be able to provide
-                    // the Response<()> to the user. Hence this is not considered an error.
+                    // More headers than we budgeted for on the interim parse. Treat as a
+                    // final response already in flight and do not send the body.
                     self.inner.close_reason.push(CloseReason::Not100Continue);
                     self.inner.state.writer = BodyWriter::new_none();
                     Ok(0)
