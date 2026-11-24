@@ -173,20 +173,15 @@ impl Call<RecvResponse> {
         self.inner.state.reader.is_some()
     }
 
-    /// Tell if response body is closed delimited
-    ///
-    /// HTTP/1.0 does not have `content-length` to serialize many requests over the same
-    /// socket. Instead it uses socket close to determine the body is finished.
-    fn is_close_delimited(&self) -> bool {
-        let rbm = self.inner.state.reader.as_ref().unwrap();
-        matches!(rbm, BodyReader::CloseDelimited)
-    }
-
     /// Proceed to the next state.
     ///
     /// This returns `None` if we have not finished receiving the response. It is guaranteed that if
     /// `can_proceed()` returns true, this will return `Some`.
-    pub fn proceed(mut self) -> Option<RecvResponseResult> {
+    pub fn proceed(self) -> Option<RecvResponseResult> {
+        self.proceed_with_redirects(false)
+    }
+
+    fn proceed_with_redirects(mut self, follow: bool) -> Option<RecvResponseResult> {
         if !self.can_proceed() {
             return None;
         }
@@ -200,6 +195,9 @@ impl Call<RecvResponse> {
                     .push(CloseReason::CloseDelimitedBody);
             }
 
+            if follow && self.inner.is_redirect() && !self.inner.close_reason.is_empty() {
+                return Some(RecvResponseResult::Redirect(Call::wrap(self.inner)));
+            }
             Some(RecvResponseResult::RecvBody(Call::wrap(self.inner)))
         } else {
             Some(if self.inner.is_redirect() {
@@ -208,6 +206,22 @@ impl Call<RecvResponse> {
                 RecvResponseResult::Cleanup(Call::wrap(self.inner))
             })
         }
+    }
+
+    /// Tell if response body is closed delimited
+    ///
+    /// HTTP/1.0 does not have `content-length` to serialize many requests over the same
+    /// socket. Instead it uses socket close to determine the body is finished.
+    fn is_close_delimited(&self) -> bool {
+        let rbm = self.inner.state.reader.as_ref().unwrap();
+        matches!(rbm, BodyReader::CloseDelimited)
+    }
+
+    /// Proceed while following redirects. If the response is a redirect and the
+    /// connection must close, skip its body and return the redirect immediately.
+    /// The caller must close that connection before issuing another request.
+    pub fn proceed_following_redirects(self) -> Option<RecvResponseResult> {
+        self.proceed_with_redirects(true)
     }
 
     /// Convert the state to receive a body despite method.

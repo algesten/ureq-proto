@@ -97,6 +97,36 @@ fn accepted_partial_redirect_does_not_wait_for_eof() {
 }
 
 #[test]
+fn skip_only_redirect_bodies_on_closing_connections() {
+    use crate::client::RecvResponseResult;
+    for close in [false, true] {
+        for follow in [false, true] {
+            let connection = if close { "close" } else { "keep-alive" };
+            let head = format!(
+                "HTTP/1.1 302 Found\r\nLocation: /next\r\nConnection: {connection}\r\nContent-Length: 100\r\n\r\n"
+            );
+            let mut call = Scenario::builder()
+                .get("https://q.test")
+                .build()
+                .to_recv_response();
+            call.try_response(head.as_bytes(), false).unwrap();
+            let next = if follow {
+                call.proceed_following_redirects()
+            } else {
+                call.proceed()
+            };
+            match next.unwrap() {
+                RecvResponseResult::Redirect(r) => {
+                    assert!(follow && close && r.must_close_connection())
+                }
+                RecvResponseResult::RecvBody(_) => assert!(!(follow && close)),
+                _ => panic!("unexpected cleanup"),
+            }
+        }
+    }
+}
+
+#[test]
 fn prepended_100_continue() {
     // In the case of expect-100-continue, there's a chance the 100-continue
     // arrives after we started sending the request body, in which case
