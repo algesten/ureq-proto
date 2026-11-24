@@ -526,19 +526,18 @@ mod tests_client {
         assert!(matches!(err, Error::BadLocationHeader(_)));
     }
 
-    // HeadersWith100
+    // 100 Continue with headers is accepted (RFC 9110 §15.2); headers are ignored.
     #[test]
-    fn test_headers_with_100() {
+    fn test_100_continue_with_headers_is_accepted() {
         let (mut call, _) = setup_recv_response_call();
 
-        // 100 Continue response with headers
         const RES: &[u8] = b"HTTP/1.1 100 Continue\r\n\
-            Content-Type: text/plain\r\n\
+            Alt-Svc: h3=\":443\"; ma=2592000\r\n\
             \r\n";
 
-        let err = call.try_response(RES, false).unwrap_err();
-
-        assert!(matches!(err, Error::HeadersWith100));
+        let (n, response) = call.try_response(RES, false).unwrap();
+        assert_eq!(n, RES.len());
+        assert!(response.is_none(), "100 Continue is consumed, not returned");
     }
 
     // BodyIsChunked

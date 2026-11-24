@@ -107,7 +107,7 @@ fn proceed_after_403_with_headers() {
 
     let mut call = scenario.to_await_100();
 
-    let input = b"HTTP/1.1 403 Forbidden\r\nContent-Length: 100\r\n";
+    let input = b"HTTP/1.1 403 Forbidden\r\nContent-Length: 100\r\n\r\n";
     let n = call.try_read_100(input).unwrap();
     assert_eq!(n, 0);
 
@@ -120,6 +120,32 @@ fn proceed_after_403_with_headers() {
     match call.proceed() {
         Ok(Await100Result::RecvResponse(_)) => {}
         _ => panic!("proceed after 403 should go to RecvResponse"),
+    }
+}
+
+#[test]
+fn proceed_after_100_continue_with_headers() {
+    let scenario = Scenario::builder()
+        .put("https://q.test")
+        .header("expect", "100-continue")
+        .build();
+
+    let mut call = scenario.to_await_100();
+
+    // Traefik (and others) put Alt-Svc on interim 100 responses.
+    let input = b"HTTP/1.1 100 Continue\r\nAlt-Svc: h3=\":443\"; ma=2592000\r\n\r\n";
+    let n = call.try_read_100(input).unwrap();
+    assert_eq!(n, input.len());
+
+    assert!(!call.can_keep_await_100());
+
+    let inner = call.inner();
+    assert!(inner.state.writer.has_body());
+    assert!(inner.close_reason.is_empty());
+
+    match call.proceed() {
+        Ok(Await100Result::SendBody(_)) => {}
+        _ => panic!("100 Continue with headers should still proceed to SendBody"),
     }
 }
 
