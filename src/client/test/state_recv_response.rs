@@ -53,6 +53,19 @@ fn receive_complete_response() {
 }
 
 #[test]
+fn chunked_framing_removes_content_length() {
+    let mut call = Scenario::builder()
+        .get("https://q.test")
+        .build()
+        .to_recv_response();
+    let head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 5\r\n\r\n";
+    let (_, response) = call.try_response(head, false).unwrap();
+    let response = response.unwrap();
+    assert!(!response.headers().contains_key(header::CONTENT_LENGTH));
+    assert_eq!(response.headers()[header::TRANSFER_ENCODING], "chunked");
+}
+
+#[test]
 fn partial_redirect_with_empty_header_value() {
     // Broken servers may omit the final \r\n of a redirect. With
     // allow_partial_redirect we accept the redirect from the partial

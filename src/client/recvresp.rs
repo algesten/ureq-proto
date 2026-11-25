@@ -101,7 +101,7 @@ impl Call<RecvResponse> {
         allow_partial_redirect: bool,
     ) -> Result<Option<(usize, Response<()>)>, Error> {
         // ~3k for 100 headers
-        let (input_used, response) = match try_parse_response::<MAX_RESPONSE_HEADERS>(input)? {
+        let (input_used, mut response) = match try_parse_response::<MAX_RESPONSE_HEADERS>(input)? {
             Some(v) => v,
             None => {
                 // The caller decides whether to allow a partial parse.
@@ -163,6 +163,9 @@ impl Call<RecvResponse> {
             response.headers(),
         )?;
 
+        if matches!(recv_body_mode, BodyReader::Chunked(_)) {
+            response.headers_mut().remove(header::CONTENT_LENGTH);
+        }
         self.inner.state.reader = Some(recv_body_mode);
 
         Ok(Some((input_used, response)))

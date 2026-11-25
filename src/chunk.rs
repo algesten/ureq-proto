@@ -5,10 +5,10 @@ use crate::util::find_crlf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Dechunker {
-    Size,
+    Size(usize),
     Chunk(usize),
-    CrLf,
-    Ending,
+    CrLf(usize),
+    Ending(usize),
     Trailer,
     Ended,
 }
@@ -21,7 +21,7 @@ struct Pos {
 
 impl Dechunker {
     pub fn new() -> Self {
-        Dechunker::Size
+        Dechunker::Size(0)
     }
 
     pub fn parse_input(&mut self, src: &[u8], dst: &mut [u8]) -> Result<(usize, usize), Error> {
@@ -32,10 +32,10 @@ impl Dechunker {
 
         loop {
             let more = match self {
-                Dechunker::Size => self.read_size(src, &mut pos)?,
+                Dechunker::Size(_) => self.read_size(src, &mut pos)?,
                 Dechunker::Chunk(_) => self.read_data(src, dst, &mut pos)?,
-                Dechunker::CrLf => self.expect_crlf(src, &mut pos)?,
-                Dechunker::Ending => self.trailer_or_ended(src, &mut pos)?,
+                Dechunker::CrLf(_) => self.expect_crlf(src, &mut pos)?,
+                Dechunker::Ending(_) => self.trailer_or_ended(src, &mut pos)?,
                 Dechunker::Trailer => self.trailer(src, &mut pos)?,
                 Dechunker::Ended => false,
             };
@@ -49,7 +49,7 @@ impl Dechunker {
     }
 
     pub fn is_on_chunk_boundary(&self) -> bool {
-        *self == Self::Size
+        matches!(self, Self::Size(_))
     }
 
     #[cfg(test)]
@@ -63,13 +63,13 @@ impl Dechunker {
 
     #[cfg(feature = "client")]
     pub fn is_ending(&self) -> bool {
-        matches!(self, Self::Ending)
+        matches!(self, Self::Ending(_))
     }
 
     fn read_size(&mut self, src: &[u8], pos: &mut Pos) -> Result<bool, Error> {
         let src = &src[pos.index_in..];
 
-        let i = match find_crlf(src) {
+        let i = match self.find_framing_crlf(src) {
             Some(v) => v,
             None => return Ok(false),
         };
@@ -91,12 +91,26 @@ impl Dechunker {
 
         pos.index_in += i + 2;
         *self = if len == 0 {
-            Self::Ending
+            Self::Ending(0)
         } else {
             Self::Chunk(len)
         };
 
         Ok(true)
+    }
+
+    fn find_framing_crlf(&mut self, src: &[u8]) -> Option<usize> {
+        let (Self::Size(start) | Self::CrLf(start) | Self::Ending(start)) = self else {
+            unreachable!()
+        };
+        *start = (*start).min(src.len());
+        let tail = &src[*start..];
+        if let Some(i) = find_crlf(tail) {
+            return Some(*start + i);
+        }
+        // Keep the first CR pending until its LF arrives.
+        *start += tail.iter().position(|&b| b == b'\r').unwrap_or(tail.len());
+        None
     }
 
     fn read_data(&mut self, src: &[u8], dst: &mut [u8], pos: &mut Pos) -> Result<bool, Error> {
@@ -117,7 +131,7 @@ impl Dechunker {
         *left -= to_read;
 
         if *left == 0 {
-            *self = Self::CrLf;
+            *self = Self::CrLf(0);
         }
 
         Ok(to_read > 0)
@@ -126,7 +140,7 @@ impl Dechunker {
     fn expect_crlf(&mut self, src: &[u8], pos: &mut Pos) -> Result<bool, Error> {
         let src = &src[pos.index_in..];
 
-        let i = match find_crlf(src) {
+        let i = match self.find_framing_crlf(src) {
             Some(v) => v,
             None => return Ok(false),
         };
@@ -136,7 +150,7 @@ impl Dechunker {
         }
 
         pos.index_in += 2;
-        *self = Self::Size;
+        *self = Self::Size(0);
 
         Ok(false)
     }
@@ -144,7 +158,7 @@ impl Dechunker {
     fn trailer_or_ended(&mut self, src: &[u8], pos: &mut Pos) -> Result<bool, Error> {
         let src = &src[pos.index_in..];
 
-        let i = match find_crlf(src) {
+        let i = match self.find_framing_crlf(src) {
             Some(v) => v,
             None => return Ok(false),
         };
@@ -171,7 +185,7 @@ impl Dechunker {
 
         // advance the trailer, and 2 for the crlf.
         pos.index_in += i + 2;
-        *self = Self::Ending;
+        *self = Self::Ending(0);
 
         Ok(true)
     }
@@ -191,6 +205,26 @@ mod test {
         assert_eq!(d.left(), 0);
         assert_eq!(d.parse_input(b"2\r\n", &mut b)?, (3, 0));
         assert_eq!(d.left(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn fragmented_trailers() -> Result<(), Error> {
+        let mut d = Dechunker::new();
+        let mut out = [0; 1];
+        assert_eq!(d.parse_input(b"0\r\n", &mut out)?, (3, 0));
+        for line in [b"Field: one\r\n".as_slice(), b"Field: two\r\n", b"\r\n"] {
+            for end in 1..line.len() {
+                assert_eq!(d.parse_input(&line[..end], &mut out)?, (0, 0));
+                if line[end - 1] == b'\r' {
+                    assert_eq!(d, Dechunker::Ending(end - 1));
+                } else {
+                    assert_eq!(d, Dechunker::Ending(end));
+                }
+            }
+            assert_eq!(d.parse_input(line, &mut out)?, (line.len(), 0));
+        }
+        assert!(d.is_ended());
         Ok(())
     }
 
